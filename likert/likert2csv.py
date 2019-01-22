@@ -83,21 +83,21 @@ class Report:
             df.loc[key,'Q'] = self.questions[key]
 
         # Swap question with question-key
-        col_index = ["Q", 'CNT', 'AVG', "CAV", "BOX", "CBO" ] # 'SD','D', 'N','A', 'SA'
+        col_index = ['Q', 'SD','D', 'N','A', 'SA', 'CNT', 'AVG', "CAV", "BOX", "CBO" ] #
         df = df.reindex(col_index, axis=1)
 
         # Numan readable column names
         df = df.rename(columns={
-        "SD":  "Strongly disagree",
-        "D":   "Disagree",
-        "N":   "Neither agree nor disagree",
-        "A":   "Agree",
-        "SA":  "Strongly agree",
-        "CNT": "Anzahl Antworten",
-        "AVG": "Your Average",
-        "CAV": "Company Average",
-        "BOX": "Your Score",
-        "CBO": "Company Score",
+        "SD":  "-2",
+        "D":   "-1",
+        "N":   "0",
+        "A":   "+1",
+        "SA":  "+2",
+        "CNT": "Anzahl:",
+        "AVG": name,
+        "CAV": "Company",
+        "BOX": name + "Top Box",
+        "CBO": "Company Top Box",
         "Q":   "Frage"
         })
 
@@ -165,12 +165,21 @@ class Report:
                 counts = g_fnc (df.loc[self.questions[key],0].value_counts(), i)
                 df.loc[self.questions[key], columns_names[i-1]] = int(counts)
 
+        # Calulate Averages and add new columns CNT and AVG
+        for key in self.question_key_list:
+            total = df.loc[self.questions[key],[0]].sum()
+            count = df.loc[self.questions[key],["SD", "D", "N", "A", "SA"]].sum()
+            df.loc[self.questions[key], "XXCNT"] = count
+            df.loc[self.questions[key], "XXAVG"] = total / count
+
+
         # Delete the raw survey data
         df.drop(0, axis=1, inplace=True)
 
         for key in self.questions:
             df.loc[self.questions[key],'ID'] = key
         df = df.set_index('ID')
+
 
         for key in self.question_key_list:
 

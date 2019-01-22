@@ -104,68 +104,6 @@ def create_collector(options):
 
     mitarbeiter.to_csv('collector-data.csv', index=False)
 
-def create_abt_tree(options):
-
-    df = pd.read_csv(options.filename)
-
-    keep = [
-        'Nachname',
-        'Vorname',
-        'Sub-Abteilung',
-        ]
-
-    for column_name in df.columns.tolist():
-        if column_name not in keep:
-            df = df.drop(columns=[column_name])
-
-    df = df.loc[df['Nachname'].notna()]
-    df['Mitarbeiter']  = df.apply(lambda row: row['Nachname'] + ", " + row['Vorname'], axis=1)
-    df = df.loc[df['Mitarbeiter'].notna()]
-
-    df = df.drop(columns=['Nachname', 'Vorname'])
-    print( df.columns.tolist())
-
-
-    df.to_json('collector-abt.json')
-
-
-def create_vg_tree(options):
-
-    df = pd.read_csv(options.filename)
-
-    keep = [
-        'Nachname',
-        'Vorname',
-        'Vorgesetzter'
-        ]
-
-    for column_name in df.columns.tolist():
-        if column_name not in keep:
-            df = df.drop(columns=[column_name])
-
-    df = df.loc[df['Nachname'].notna()]
-    df['Mitarbeiter']  = df.apply(lambda row: row['Nachname'] + ", " + row['Vorname'], axis=1)
-    df = df.loc[df['Mitarbeiter'].notna()]
-
-
-    tree = {}
-    vgl = df['Vorgesetzter'].unique().tolist()
-
-    for vg in vgl:
-        tree[vg] = []
-        print(f'Vorgesetzter: {vg}')
-        mas = df.loc[ (df['Vorgesetzter'] == vg) ]
-
-        for idx,ma in mas.iterrows():
-            name = ma['Mitarbeiter']
-            if name in vgl:
-                tree[vg].append(name)
-                print(f' - append: {name}')
-
-    with open('collector-vg-tree.json', 'w') as outfile:
-        json.dump(tree, outfile)
-
-
 if __name__ == "__main__":
 
     parser = OptionParser()
@@ -180,5 +118,3 @@ if __name__ == "__main__":
     (options, args) = parser.parse_args()
 
     create_collector(options)
-    create_vg_tree(options)
-    create_abt_tree(options)

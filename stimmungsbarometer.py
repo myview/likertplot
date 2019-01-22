@@ -7,8 +7,6 @@ import json
 import sys
 
 
-
-
 def read_survey(options):
 
 
@@ -69,30 +67,23 @@ def read_survey(options):
 
     df['Stimmungswert'] = df['Stimmungswert'].astype(int)
 
-
-    #df['Vorgesetzter'] = df.apply(lambda row: row['VGFIRST'] + " " + row['VGLAST'], axis=1)
-    #df['Mitarbeiter']  = df.apply(lambda row: row['first_name'] + " " + row['last_name'], axis=1)
-
     df['Vorgesetzter'] = df.apply(lambda row: row['VGLAST'] + ", " + row['VGFIRST'], axis=1)
     df['Mitarbeiter']  = df.apply(lambda row: row['last_name'] + ", " + row['first_name'], axis=1)
+
+    abt = pd.read_json('collector-abt.json')
+    df = pd.merge(df, abt, on='Mitarbeiter')
 
     v1 = df.groupby('Vorgesetzter').mean(numeric_only=True)
     v2 = df.groupby('Gruppe').mean(numeric_only=True)
     v3 = df.groupby('Team').mean(numeric_only=True)
     v4 = df.groupby('Abteilung').mean(numeric_only=True)
-
-    #print(v4)
-    #print(v4.to_dict())
+    v5 = df.groupby('Sub-Abteilung').mean(numeric_only=True)
 
     c1 = df.groupby('Vorgesetzter').count()['Stimmungswert']
     c2 = df.groupby('Gruppe').count()['Stimmungswert']
     c3 = df.groupby('Team').count()['Stimmungswert']
     c4 = df.groupby('Abteilung').count()['Stimmungswert']
-
-    #print(df.groupby('Vorgesetzter').count().to_dict()['Stimmungswert'])
-
-    #print(v.to_dict()['Stimmungswert'])
-    #print(v.to_dict()['Stimmungswert']['Adelisa Kapic'])
+    c5 = df.groupby('Sub-Abteilung').count()['Stimmungswert']
 
     df['Gruppe-Mean'] = df['Gruppe']
     df['Gruppe-Count'] = df['Gruppe']
@@ -106,6 +97,9 @@ def read_survey(options):
     df['Abteilung-Mean'] = df['Abteilung']
     df['Abteilung-Count'] = df['Abteilung']
 
+    df['Sub-Abteilung-Mean'] = df['Sub-Abteilung']
+    df['Sub-Abteilung-Count'] = df['Sub-Abteilung']
+
     df = df.replace({'Vorgesetzter-Mean'  : v1.to_dict()['Stimmungswert']})
     df = df.replace({'Vorgesetzter-Count' : c1.to_dict()})
 
@@ -118,13 +112,8 @@ def read_survey(options):
     df = df.replace({'Abteilung-Mean'  : v4.to_dict()['Stimmungswert']})
     df = df.replace({'Abteilung-Count'  : c4.to_dict()})
 
-    #CEO = 'Florian Teuteberg'
-    #tree = {CEO}
-    #res = df.loc[df['Vorgesetzter'] == CEO]
-    #for ma in res.Mitarbeiter:
-        #res2 = df.loc[df['Vorgesetzter'] == ma]
-        ##print (res2)
-
+    df = df.replace({'Sub-Abteilung-Mean'  : v5.to_dict()['Stimmungswert']})
+    df = df.replace({'Sub-Abteilung-Count'  : c5.to_dict()})
 
     def rec_add_to(name, res, vglst):
         res.append(name)
@@ -132,54 +121,44 @@ def read_survey(options):
             rec_add_to(subname, res, vglst)
         return res
 
-    with open('vg.json') as json_file:
+    with open('collector-vg-fnames.json') as json_file:
+        fnames = json.load(json_file)
+
+    with open('collector-vg-tree.json') as json_file:
         vgl = json.load(json_file)
         for vg in vgl:
-            print(f"# start new list with: {vg}")
+            print(f">>> Vorgesetzter: {vg}")
+
+            if vg == "NaN":
+                # CEO
+                continue
+
+            name = fnames[vg]
+
             res = []
             res = rec_add_to(vg, res, vgl)
 
-            #print(res)
-            #sys.exit(0)
-            #print(type(res))
             dfl = df.copy(deep=True)
             dfl = dfl.loc[ dfl['Vorgesetzter'].isin(res)]
 
-            #print(dfl)
-
-            """
-            Datum
-            Gruppe
-            Team
-            Abteilung
-            Stimmungswert
-            Motivation 1
-            Motivation 2
-            Verbesserung 1
-            Verbesserung 2
-
-            """
-            #sys.exit(0)
-
             # open the XLSX writer
-            writer = pd.ExcelWriter(vg + 'output.xlsx', engine='xlsxwriter')
+            writer = pd.ExcelWriter(name, engine='xlsxwriter')
 
+            # for each filter
+            x = ['Vorgesetzter', 'Gruppe', 'Team', 'Sub-Abteilung', 'Abteilung']
 
-            x = ['Vorgesetzter', 'Gruppe', 'Team', 'Abteilung']
+            for filter in x:
+                #print(f'>>> Filter: {filter} - with min number of respones: {options.min_nr_of_resp}')
 
-            for mode in x:
-                print(f'MODE: {mode} - with min number of respones: {options.min_nr_of_resp}')
-
-                sheet  = mode
+                sheet  = filter
 
                 dfc= dfl.copy(deep=True)
 
                 dfc = dfl.reindex([
-                    mode,
+                    filter,
                     'Stimmungswert',
-
-                    f'{mode}-Mean',
-                    f'{mode}-Count',
+                    f'{filter}-Mean',
+                    f'{filter}-Count',
                     'Motivation 1',
                     'Motivation 2',
                     'Verbesserung 1',
@@ -187,9 +166,32 @@ def read_survey(options):
 
                     ], axis=1)
 
-                dfc = dfc.loc[dfc[f'{mode}-Count'] > options.min_nr_of_resp]
-                #dfnok = df.loc[df[f'{mode}-Count'] <= options.min_nr_of_resp]
-                ##print(dfnok)
+                # Remove all responses where its count is below minimum
+                # --------------------------------------------------------------
+
+                # Remove all rows where the response cound is to low
+                # independant of the management hierarchie
+                dfc = dfc.loc[dfc[f'{filter}-Count'] > options.min_nr_of_resp]
+
+                # Check the number of responses based on the current filter
+                # ... this is special case when the filter removes some values
+                # ... from the total count. Occures when the same group id
+                # ... is used over different management levels
+
+                if not dfc.empty:
+                    # if not already empty, check all single reports
+
+                    # get the counts grouped by the column with the name of
+                    # the filter and add it to the new column Filter-Count
+                    c = dfc.groupby(filter).count()['Stimmungswert']
+                    dfc['Filter-Count'] = df[filter]
+                    dfc = dfc.replace({'Filter-Count' : c.to_dict()})
+                    # Drop all rows where the Filter-Count is below the min
+                    dfc = dfc.loc[dfc['Filter-Count'] > options.min_nr_of_resp]
+
+
+                # Write dataframe to the xlsx sheet
+                # --------------------------------------------------------------
 
                 # add data frame to sheet
                 dfc.to_excel(writer, sheet)
@@ -204,31 +206,8 @@ def read_survey(options):
                 #https://xlsxwriter.readthedocs.io/worksheet.html#autofilter
                 worksheet.autofilter(0, 0, last_row, last_col)
 
-                # final save
+            # final save
             writer.save()
-
-    """
-    else:
-        df = df.reindex([
-            'EMAIL',
-            'Vorgesetzter',
-            'Vorgesetzter-Mean',
-            'Vorgesetzter-Count',
-            'Gruppe',
-            'Gruppe-Mean',
-            'Gruppe-Count',
-            'Team',
-            'Team-Mean',
-            'Team-Count',
-            'Abteilung',
-            'Abteilung-Mean',
-            'Abteilung-Count',
-            ], axis=1)
-    """
-
-    df.to_csv('output.csv', index=True) #, float_format = '%0.00f')
-
-
 
 
 if __name__ == "__main__":

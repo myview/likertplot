@@ -24,6 +24,10 @@ def read_survey(options):
     df = df.drop(columns=['Name',
                           'Boss Name'])
 
+    # open master data
+    with open('master.json') as json_file:
+        master = json.load(json_file)
+
     # Rename columns
     df = df.rename(columns={
         'Gebe bitte an, wie zufrieden du bist als Angestellte/r von digitec/Galaxus. Die Skala geht von 1 (schlechtester Wert) bis 10 (bester Wert).Indique ton degré de satisfaction en tant qu’employé(e) digitec/Galaxus. L’échelle va de 1 (la moins bonne note) à 10 (la meilleure note).' : 'Stimmungswert',
@@ -40,27 +44,13 @@ def read_survey(options):
         })
 
 
-    # Merge all values into one
-    # TODO could we fix this in SurveyMonkey direct?
-    df['Stimmungswert'] = df['Stimmungswert'].fillna(df['Unnamed: 14'])
-    df['Stimmungswert'] = df['Stimmungswert'].fillna(df['Unnamed: 15'])
-    df['Stimmungswert'] = df['Stimmungswert'].fillna(df['Unnamed: 16'])
-    df['Stimmungswert'] = df['Stimmungswert'].fillna(df['Unnamed: 17'])
-    df['Stimmungswert'] = df['Stimmungswert'].fillna(df['Unnamed: 18'])
-    df['Stimmungswert'] = df['Stimmungswert'].fillna(df['Unnamed: 19'])
-    df['Stimmungswert'] = df['Stimmungswert'].fillna(df['Unnamed: 20'])
-    df['Stimmungswert'] = df['Stimmungswert'].fillna(df['Unnamed: 21'])
-    df['Stimmungswert'] = df['Stimmungswert'].fillna(df['Unnamed: 22'])
-    df = df.drop(columns=['Unnamed: 14',
-                          'Unnamed: 15',
-                          'Unnamed: 16',
-                          'Unnamed: 17',
-                          'Unnamed: 18',
-                          'Unnamed: 19',
-                          'Unnamed: 20',
-                          'Unnamed: 21',
-                          'Unnamed: 22',
-                          ])
+    # Merge all values (unamed columns 14 to 22) into one
+    for idx in range (14, 23):
+        df['Stimmungswert'] = df['Stimmungswert'].fillna(df[f'Unnamed: {idx}'])
+
+    # Drop the unnamed columns 14 to 22)
+    df = df.drop(columns= ['Unnamed: %s' % x for x in range(14,23)])
+
 
     # Delte Row 2 some helper text
     df = df.drop(df.index[0])
@@ -127,6 +117,9 @@ def read_survey(options):
     with open('collector-vg-tree.json') as json_file:
         vgl = json.load(json_file)
         for vg in vgl:
+
+            vg = "Teuteberg, Florian"
+
             print(f">>> Vorgesetzter: {vg}")
 
             if vg == "NaN":
@@ -154,7 +147,7 @@ def read_survey(options):
 
                 dfc= dfl.copy(deep=True)
 
-                dfc = dfl.reindex([
+                col_idx = [
                     filter,
                     'Stimmungswert',
                     f'{filter}-Mean',
@@ -163,8 +156,9 @@ def read_survey(options):
                     'Motivation 2',
                     'Verbesserung 1',
                     'Verbesserung 2'
+                    ]
 
-                    ], axis=1)
+                dfc = dfl.reindex(col_idx, axis=1)
 
                 # Remove all responses where its count is below minimum
                 # --------------------------------------------------------------
@@ -206,9 +200,20 @@ def read_survey(options):
                 #https://xlsxwriter.readthedocs.io/worksheet.html#autofilter
                 worksheet.autofilter(0, 0, last_row, last_col)
 
+                text_format = workbook.add_format()
+                text_format.set_text_wrap()
+
+                worksheet.set_column(col_idx.index('Motivation 1') + 1,
+                                     col_idx.index('Verbesserung 2') + 1,
+                                     width = 40,
+                                     cell_format = text_format
+                                     )
+
+
             # final save
             writer.save()
 
+            break
 
 if __name__ == "__main__":
 

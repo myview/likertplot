@@ -5,6 +5,18 @@ from optparse import OptionParser
 import pandas as pd
 import json
 import sys
+import re
+
+def get_id(name):
+
+    """
+    https://pythex.org
+    https://tinyurl.com/yd6p4kbz
+    """
+    m = re.search('^([A-Z]{2,}|[0-9]{2,})', name)
+    if m:
+        return m.group(0)
+    return name
 
 
 def read_survey(options):
@@ -51,18 +63,33 @@ def read_survey(options):
     # Drop the unnamed columns 14 to 22)
     df = df.drop(columns= ['Unnamed: %s' % x for x in range(14,23)])
 
-
     # Delte Row 2 some helper text
     df = df.drop(df.index[0])
 
     df['Stimmungswert'] = df['Stimmungswert'].astype(int)
-
-    df['Vorgesetzter'] = df.apply(lambda row: row['VGLAST'] + ", " + row['VGFIRST'], axis=1)
-    df['Mitarbeiter']  = df.apply(lambda row: row['last_name'] + ", " + row['first_name'], axis=1)
+    df['Vorgesetzter']  = df.apply(lambda row: row['VGLAST'] + ", " + row['VGFIRST'], axis=1)
+    df['Mitarbeiter']   = df.apply(lambda row: row['last_name'] + ", " + row['first_name'], axis=1)
 
     abt = pd.read_json('collector-abt.json')
     df = pd.merge(df, abt, on='Mitarbeiter')
 
+
+    # Calculate all filters
+    filters = ['Vorgesetzter', 'Gruppe', 'Team', 'Sub-Abteilung', 'Abteilung']
+    for name in filters:
+        df[f'{name}-Mean'] = df[name]
+        df[f'{name}-Count'] = df[name]
+        df[f'{name}-Max'] = df[name]
+        # for compatiblity, master file is based on id name only:
+        df[f'{name}-Max'] = df[f'{name}-Max'].map(get_id)
+        mean  = df.groupby(name).mean(numeric_only=True).to_dict()['Stimmungswert']
+        count = df.groupby(name).count()['Stimmungswert'].to_dict()
+        df = df.replace({f'{name}-Mean' : mean})
+        df = df.replace({f'{name}-Count': count})
+        df = df.replace({f'{name}-Max'  : master['counts'][name]})
+        df[f'{name}-%'] = df.loc[:,f'{name}-Count'].astype(int) / df.loc[:,f'{name}-Max'].astype(int)
+
+    """
     v1 = df.groupby('Vorgesetzter').mean(numeric_only=True)
     v2 = df.groupby('Gruppe').mean(numeric_only=True)
     v3 = df.groupby('Team').mean(numeric_only=True)
@@ -104,6 +131,7 @@ def read_survey(options):
 
     df = df.replace({'Sub-Abteilung-Mean'  : v5.to_dict()['Stimmungswert']})
     df = df.replace({'Sub-Abteilung-Count'  : c5.to_dict()})
+    """
 
     def rec_add_to(name, res, vglst):
         res.append(name)
@@ -138,9 +166,9 @@ def read_survey(options):
             writer = pd.ExcelWriter(name, engine='xlsxwriter')
 
             # for each filter
-            x = ['Vorgesetzter', 'Gruppe', 'Team', 'Sub-Abteilung', 'Abteilung']
+            #x = ['Vorgesetzter', 'Gruppe', 'Team', 'Sub-Abteilung', 'Abteilung']
 
-            for filter in x:
+            for filter in filters:
                 #print(f'>>> Filter: {filter} - with min number of respones: {options.min_nr_of_resp}')
 
                 sheet  = filter
@@ -152,6 +180,8 @@ def read_survey(options):
                     'Stimmungswert',
                     f'{filter}-Mean',
                     f'{filter}-Count',
+                    f'{filter}-Max',
+                    f'{filter}-%',
                     'Motivation 1',
                     'Motivation 2',
                     'Verbesserung 1',

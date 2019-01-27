@@ -89,161 +89,114 @@ def read_survey(options):
         df = df.replace({f'{name}-Max'  : master['counts'][name]})
         df[f'{name}-%'] = df.loc[:,f'{name}-Count'].astype(int) / df.loc[:,f'{name}-Max'].astype(int)
 
-    """
-    v1 = df.groupby('Vorgesetzter').mean(numeric_only=True)
-    v2 = df.groupby('Gruppe').mean(numeric_only=True)
-    v3 = df.groupby('Team').mean(numeric_only=True)
-    v4 = df.groupby('Abteilung').mean(numeric_only=True)
-    v5 = df.groupby('Sub-Abteilung').mean(numeric_only=True)
-
-    c1 = df.groupby('Vorgesetzter').count()['Stimmungswert']
-    c2 = df.groupby('Gruppe').count()['Stimmungswert']
-    c3 = df.groupby('Team').count()['Stimmungswert']
-    c4 = df.groupby('Abteilung').count()['Stimmungswert']
-    c5 = df.groupby('Sub-Abteilung').count()['Stimmungswert']
-
-    df['Gruppe-Mean'] = df['Gruppe']
-    df['Gruppe-Count'] = df['Gruppe']
-
-    df['Vorgesetzter-Mean'] = df['Vorgesetzter']
-    df['Vorgesetzter-Count'] = df['Vorgesetzter']
-
-    df['Team-Mean'] = df['Team']
-    df['Team-Count'] = df['Team']
-
-    df['Abteilung-Mean'] = df['Abteilung']
-    df['Abteilung-Count'] = df['Abteilung']
-
-    df['Sub-Abteilung-Mean'] = df['Sub-Abteilung']
-    df['Sub-Abteilung-Count'] = df['Sub-Abteilung']
-
-    df = df.replace({'Vorgesetzter-Mean'  : v1.to_dict()['Stimmungswert']})
-    df = df.replace({'Vorgesetzter-Count' : c1.to_dict()})
-
-    df = df.replace({'Gruppe-Mean'  : v2.to_dict()['Stimmungswert']})
-    df = df.replace({'Gruppe-Count' : c2.to_dict()})
-
-    df = df.replace({'Team-Mean'  : v3.to_dict()['Stimmungswert']})
-    df = df.replace({'Team-Count'  : c3.to_dict()})
-
-    df = df.replace({'Abteilung-Mean'  : v4.to_dict()['Stimmungswert']})
-    df = df.replace({'Abteilung-Count'  : c4.to_dict()})
-
-    df = df.replace({'Sub-Abteilung-Mean'  : v5.to_dict()['Stimmungswert']})
-    df = df.replace({'Sub-Abteilung-Count'  : c5.to_dict()})
-    """
-
     def rec_add_to(name, res, vglst):
         res.append(name)
         for subname in vglst[name]:
             rec_add_to(subname, res, vglst)
         return res
 
-    with open('collector-vg-fnames.json') as json_file:
-        fnames = json.load(json_file)
+    for vg in master['tree']:
 
-    with open('collector-vg-tree.json') as json_file:
-        vgl = json.load(json_file)
-        for vg in vgl:
+        #vg = "Teuteberg, Florian"
 
-            vg = "Teuteberg, Florian"
+        print(f">>> Vorgesetzter: {vg}")
 
-            print(f">>> Vorgesetzter: {vg}")
+        if vg == "NaN":
+            # CEO
+            continue
 
-            if vg == "NaN":
-                # CEO
-                continue
+        name = master['filenames'][vg]
 
-            name = fnames[vg]
+        res = []
+        res = rec_add_to(vg, res, master['tree'])
 
-            res = []
-            res = rec_add_to(vg, res, vgl)
+        dfl = df.copy(deep=True)
+        dfl = dfl.loc[ dfl['Vorgesetzter'].isin(res)]
 
-            dfl = df.copy(deep=True)
-            dfl = dfl.loc[ dfl['Vorgesetzter'].isin(res)]
+        # open the XLSX writer
+        writer = pd.ExcelWriter(name, engine='xlsxwriter')
 
-            # open the XLSX writer
-            writer = pd.ExcelWriter(name, engine='xlsxwriter')
+        for filter in filters:
+            #print(f'>>> Filter: {filter} - with min number of respones: {options.min_nr_of_resp}')
 
-            # for each filter
-            #x = ['Vorgesetzter', 'Gruppe', 'Team', 'Sub-Abteilung', 'Abteilung']
+            sheet  = filter
 
-            for filter in filters:
-                #print(f'>>> Filter: {filter} - with min number of respones: {options.min_nr_of_resp}')
+            dfc= dfl.copy(deep=True)
 
-                sheet  = filter
+            col_idx = [
+                filter,
+                'Stimmungswert',
+                f'{filter}-Mean',
+                f'{filter}-Count',
+                f'{filter}-Max',
+                f'{filter}-%',
+                'Motivation 1',
+                'Motivation 2',
+                'Verbesserung 1',
+                'Verbesserung 2'
+                ]
 
-                dfc= dfl.copy(deep=True)
+            dfc = dfl.reindex(col_idx, axis=1)
 
-                col_idx = [
-                    filter,
-                    'Stimmungswert',
-                    f'{filter}-Mean',
-                    f'{filter}-Count',
-                    f'{filter}-Max',
-                    f'{filter}-%',
-                    'Motivation 1',
-                    'Motivation 2',
-                    'Verbesserung 1',
-                    'Verbesserung 2'
-                    ]
+            # Remove all responses where its count is below minimum
+            # --------------------------------------------------------------
 
-                dfc = dfl.reindex(col_idx, axis=1)
+            # Remove all rows where the response cound is to low
+            # independant of the management hierarchie
+            dfc = dfc.loc[dfc[f'{filter}-Count'] > options.min_nr_of_resp]
 
-                # Remove all responses where its count is below minimum
-                # --------------------------------------------------------------
+            # Check the number of responses based on the current filter
+            # ... this is special case when the filter removes some values
+            # ... from the total count. Occures when the same group id
+            # ... is used over different management levels
 
-                # Remove all rows where the response cound is to low
-                # independant of the management hierarchie
-                dfc = dfc.loc[dfc[f'{filter}-Count'] > options.min_nr_of_resp]
+            if not dfc.empty:
+                # if not already empty, check all single reports
 
-                # Check the number of responses based on the current filter
-                # ... this is special case when the filter removes some values
-                # ... from the total count. Occures when the same group id
-                # ... is used over different management levels
-
-                if not dfc.empty:
-                    # if not already empty, check all single reports
-
-                    # get the counts grouped by the column with the name of
-                    # the filter and add it to the new column Filter-Count
-                    c = dfc.groupby(filter).count()['Stimmungswert']
-                    dfc['Filter-Count'] = df[filter]
-                    dfc = dfc.replace({'Filter-Count' : c.to_dict()})
-                    # Drop all rows where the Filter-Count is below the min
-                    dfc = dfc.loc[dfc['Filter-Count'] > options.min_nr_of_resp]
+                # get the counts grouped by the column with the name of
+                # the filter and add it to the new column Filter-Count
+                c = dfc.groupby(filter).count()['Stimmungswert']
+                dfc['Filter-Count'] = df[filter]
+                dfc = dfc.replace({'Filter-Count' : c.to_dict()})
+                # Drop all rows where the Filter-Count is below the min
+                dfc = dfc.loc[dfc['Filter-Count'] > options.min_nr_of_resp]
 
 
-                # Write dataframe to the xlsx sheet
-                # --------------------------------------------------------------
+            # Write dataframe to the xlsx sheet
+            # --------------------------------------------------------------
 
-                # add data frame to sheet
-                dfc.to_excel(writer, sheet)
+            # add data frame to sheet
+            dfc.to_excel(writer, sheet)
 
-                last_row = dfc.shape[0] - 1
-                last_col = dfc.shape[1] - 1
+            last_row = dfc.shape[0] - 1
+            last_col = dfc.shape[1] - 1
 
-                # define and set number formats
-                workbook  = writer.book
-                worksheet = writer.sheets[sheet]
+            # define and set number formats
+            workbook  = writer.book
+            worksheet = writer.sheets[sheet]
 
-                #https://xlsxwriter.readthedocs.io/worksheet.html#autofilter
-                worksheet.autofilter(0, 0, last_row, last_col)
+            #https://xlsxwriter.readthedocs.io/worksheet.html#autofilter
+            worksheet.autofilter(0, 0, last_row, last_col)
 
-                text_format = workbook.add_format()
-                text_format.set_text_wrap()
+            text_format = workbook.add_format()
+            text_format.set_text_wrap()
+            part_format = workbook.add_format({'num_format': '0%'})
 
-                worksheet.set_column(col_idx.index('Motivation 1') + 1,
-                                     col_idx.index('Verbesserung 2') + 1,
-                                     width = 40,
-                                     cell_format = text_format
-                                     )
+            worksheet.set_column(col_idx.index(f'{filter}-%') + 1,
+                         col_idx.index(f'{filter}-%') + 1,
+                         width = 10, cell_format = part_format)
+
+            worksheet.set_column(col_idx.index('Motivation 1') + 1,
+                                 col_idx.index('Verbesserung 2') + 1,
+                                 width = 40,
+                                 cell_format = text_format
+                                 )
 
 
-            # final save
-            writer.save()
+        # final save
+        writer.save()
 
-            break
+        #break
 
 if __name__ == "__main__":
 

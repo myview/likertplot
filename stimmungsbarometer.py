@@ -58,7 +58,6 @@ class Process:
 
     def read_survey(self):
 
-
         df = pd.read_csv(self.options.filename)
 
         # Remove SurveyMonkey columns not required
@@ -72,7 +71,6 @@ class Process:
         # TODO remove unknown columns, to be checked
         df = df.drop(columns=['Name',
                             'Boss Name'])
-
 
         # Rename columns
         df = df.rename(columns={
@@ -126,7 +124,6 @@ class Process:
             df = df.replace({f'{name}-Count': count})
             df = df.replace({f'{name}-Max'  : self.master['counts'][name]})
             df[f'{name}-%'] = df.loc[:,f'{name}-Count'].astype(int) / df.loc[:,f'{name}-Max'].astype(int)
-
 
 
         for vg in self.master['tree']:
@@ -196,6 +193,10 @@ class Process:
                     # Drop all rows where the Filter-Count is below the min
                     dfc = dfc.loc[dfc['Filter-Count'] > options.min_nr_of_resp]
 
+                # Do not add empty sheets
+                if dfc.empty:
+                    continue
+
                 # Switch back to full name
                 # --------------------------------------------------------------
 
@@ -253,17 +254,28 @@ class Process:
                                     cell_format = text_format
                                     )
 
-                worksheet.conditional_format(0,
+                colors = [  "#F8696B",
+                            "#FBAA77",
+                            "#FFEB84",
+                            "#E9E583",
+                            "#D3DF82",
+                            "#BDD881",
+                            "#A6D27F",
+                            "#90CB7E",
+                            "#7AC57D",
+                            "#63BE7B"
+                         ]
+
+                for idx in range(0, len(colors)):
+                    idx_format = workbook.add_format({'bg_color': colors[idx]})
+                    worksheet.conditional_format(0,
                                              col_idx.index('Stimmungswert') + 1,
                                              last_row + 1,
                                              col_idx.index('Stimmungswert') + 1,
-                                             {'type': '3_color_scale',
-                                              'min_value': 3,
-                                              'min_color': "#F8696B",
-                                              'mid_value': 5,
-                                              'mid_color': "#FFEB84",
-                                              'max_value': 8,
-                                              'max_color': "#63BE7B"
+                                             {'type'    : 'cell',
+                                              'criteria': "=",
+                                              'value'   : idx + 1,
+                                              'format'  : idx_format
                                              })
 
             # final save

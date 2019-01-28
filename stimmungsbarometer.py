@@ -208,9 +208,9 @@ class Process:
                 # --------------------------------------------------------------
                 dfc = dfc.rename({
                     f'{filter}-%'    : 'Beteiligung',
-                    f'{filter}-Mean' : 'Mitelwert',
+                    f'{filter}-Mean' : 'Mittelwert',
                     f'{filter}-Count': 'Anzahl',
-                    f'{filter}-Max'  : 'Mögliche'
+                    f'{filter}-Max'  : 'Max'
                                  }, axis='columns')
                 if 'Filter-Count' in dfc.columns:
                     dfc = dfc.drop(columns=['Filter-Count'])

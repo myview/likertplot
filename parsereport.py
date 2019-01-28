@@ -65,7 +65,8 @@ class Process:
         t = m.group(2)
         if i not in self.master['id'][layer]:
             self.master['id'][layer][i] = []
-        self.master['id'][layer][i].append(t)
+        if t not in self.master['id'][layer][i]:
+            self.master['id'][layer][i].append(t)
 
     def drop_unwanted_columns(self, df, keep=[]):
 
@@ -206,7 +207,7 @@ class Process:
             for layer in self.layers:
                 name += ret[layer].values[0] + "-"
             name += vg.replace(', ', '-') + ".xlsx"
-            self.master['filenames'][vg] = name
+            self.master['filenames'][vg] = name.replace(' ', '-')
 
             vn = 0
             fs = 0

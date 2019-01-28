@@ -128,7 +128,7 @@ class Process:
 
         for vg in self.master['tree']:
 
-            print(f">>> Vorgesetzter: {vg}")
+            # print(f">>> Vorgesetzter: {vg}")
 
             if vg == "NaN":
                 # CEO
@@ -146,7 +146,7 @@ class Process:
             writer = pd.ExcelWriter(name, engine='xlsxwriter')
 
             for filter in filters:
-                print(f'>>> Filter: {filter} ')
+                # print(f'>>> Filter: {filter} ')
 
                 sheet  = filter
 

@@ -128,8 +128,6 @@ class Process:
 
         for vg in self.master['tree']:
 
-            # print(f">>> Vorgesetzter: {vg}")
-
             if vg == "NaN":
                 # CEO
                 continue
@@ -144,6 +142,10 @@ class Process:
 
             # open the XLSX writer
             writer = pd.ExcelWriter(name, engine='xlsxwriter')
+
+            if self.master['span'][vg]['leader'] == 0 and self.master['span'][vg]['staff'] < 3:
+                print(f'<<< remove {vg}')
+                continue
 
             for filter in filters:
                 # print(f'>>> Filter: {filter} ')
@@ -191,7 +193,7 @@ class Process:
                     dfc['Filter-Count'] = df[filter]
                     dfc = dfc.replace({'Filter-Count' : c.to_dict()})
                     # Drop all rows where the Filter-Count is below the min
-                    dfc = dfc.loc[dfc['Filter-Count'] > options.min_nr_of_resp]
+                    # dfc = dfc.loc[dfc['Filter-Count'] > options.min_nr_of_resp]
 
                 # Do not add empty sheets
                 if dfc.empty:
@@ -280,7 +282,6 @@ class Process:
 
             # final save
             writer.save()
-
 
 
 if __name__ == "__main__":

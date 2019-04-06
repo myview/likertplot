@@ -5,8 +5,6 @@ import sys
 import math
 import pandas as pd
 import numpy as np
-import matplotlib
-import matplotlib.pyplot as plt
 from   optparse import OptionParser
 from   xlsxwriter.utility import xl_rowcol_to_cell
 

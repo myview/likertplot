@@ -208,10 +208,6 @@ class Process:
 
         for vg in self.master['tree']:
 
-            #print(f">>> Vorgesetzter: {vg}")
-
-            vg = "Teuteberg, Florian"
-
             if vg == "NaN":
                 # CEO
                 continue
@@ -232,10 +228,7 @@ class Process:
                     print(f'<<< remove {vg}')
                     continue
             except:
-                print("span does not work")
-
-            #dfl.to_excel(writer, 'top')
-
+                print("span check not supported")
 
             for filter in filters:
                 # print(f'>>> Filter: {filter} ')
@@ -435,7 +428,6 @@ class Process:
         df.to_excel(writer, 'x')
         writer.save()
         
-
 if __name__ == "__main__":
 
     parser = OptionParser()

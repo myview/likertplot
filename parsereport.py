@@ -28,12 +28,14 @@ class Process:
         for layer in self.layers:
             self.master['id'][layer] = {}
         self.master['leaders'] = []
+        self.master['span'] = {}
 
         self.groups = {}
         self.gpt = {}
         self.create_collector(options)
         self.create_vg_tree(options)
         self.create_abt_tree(options)
+        self.get_low_management_span(options)
 
     def _get_id(self, name):
         """
@@ -147,14 +149,17 @@ class Process:
             for idx, ma in df.loc[(df['Vorgesetzter'] == vg)].iterrows():
                 if ma['Mitarbeiter'] in vgl:
                     vn += 1
-                    fs += 1
+
                 else:
                     fs += 1
 
+            self.master['span'][vg] = {'staff' : fs, 'leader' : vn}
             if (vn == 0 and fs < 3):
                 ret[vg] = fs
+            elif ( fs < 3 and fs > 0):
+                print(vg, fs, vn)
 
-        pprint(ret)
+        pprint(self.master['span'])
 
     def create_vg_tree(self, options):
 

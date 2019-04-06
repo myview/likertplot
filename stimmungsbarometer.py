@@ -55,9 +55,71 @@ class Process:
             self.rec_add_to(subname, res, vglst)
         return res
 
+    def write_df_sheet(self, df, col_idx, writer, sheet, filter):
+    
+        # Write dataframe to the xlsx sheet
+        # --------------------------------------------------------------
 
-    def read_survey(self):
+        # add data frame to sheet
+        df.to_excel(writer, sheet)
 
+        last_row = df.shape[0] - 1
+        last_col = df.shape[1] - 1
+
+        # define and set number formats
+        workbook  = writer.book
+        worksheet = writer.sheets[sheet]
+
+        #https://xlsxwriter.readthedocs.io/worksheet.html#autofilter
+        worksheet.autofilter(0, 0, last_row, last_col)
+
+        text_format = workbook.add_format()
+        text_format.set_text_wrap()
+        part_format = workbook.add_format({'num_format': '0%'})
+        floa_format = workbook.add_format({'num_format': '#,##0.00'})
+
+        worksheet.set_column(col_idx.index(f'{filter}-%') + 1,
+                    col_idx.index(f'{filter}-%') + 1,
+                    width = 10, cell_format = part_format)
+
+        worksheet.set_column(col_idx.index(f'{filter}-Mean') + 1,
+                            col_idx.index(f'{filter}-Mean') + 1,
+                            width = 10,
+                            cell_format = floa_format
+                            )
+
+        worksheet.set_column(col_idx.index('Motivation 1') + 1,
+                            col_idx.index('Verbesserung 2') + 1,
+                            width = 40,
+                            cell_format = text_format
+                            )
+
+        colors = [  "#F8696B",
+                    "#FBAA77",
+                    "#FFEB84",
+                    "#E9E583",
+                    "#D3DF82",
+                    "#BDD881",
+                    "#A6D27F",
+                    "#90CB7E",
+                    "#7AC57D",
+                    "#63BE7B"
+                 ]
+
+        for idx in range(0, len(colors)):
+            idx_format = workbook.add_format({'bg_color': colors[idx]})
+            worksheet.conditional_format(0,
+                                     col_idx.index('Stimmungswert') + 1,
+                                     last_row + 1,
+                                     col_idx.index('Stimmungswert') + 1,
+                                     {'type'    : 'cell',
+                                      'criteria': "=",
+                                      'value'   : idx + 1,
+                                      'format'  : idx_format
+                                     })    
+
+    
+    def read_data_from_csv(self):
         df = pd.read_csv(self.options.filename)
 
         # Remove SurveyMonkey columns not required
@@ -87,6 +149,15 @@ class Process:
             'custom_5' : 'Gruppe'
             })
 
+        return df
+    
+    
+
+    
+    def read_survey(self):
+
+        df = self.read_data_from_csv()
+
 
         filters = ['Vorgesetzter', 'Gruppe', 'Team', 'Sub-Abteilung', 'Abteilung']
 
@@ -109,6 +180,7 @@ class Process:
         df = pd.merge(df, abt, on='Mitarbeiter')
 
         # Calculate all filters
+               
         for name in filters:
 
             # Reduce all columnes used as layer to the ID
@@ -120,15 +192,25 @@ class Process:
 
             mean  = df.groupby(name).mean(numeric_only=True).to_dict()['Stimmungswert']
             count = df.groupby(name).count()['Stimmungswert'].to_dict()
+            
+            print(mean, count)
+            
             df = df.replace({f'{name}-Mean' : mean})
             df = df.replace({f'{name}-Count': count})
             df = df.replace({f'{name}-Max'  : self.master['counts'][name]})
-            df[f'{name}-%'] = df.loc[:,f'{name}-Count'].astype(int) / df.loc[:,f'{name}-Max'].astype(int)
+            
+
+            try:
+                df[f'{name}-%'] = df.loc[:,f'{name}-Count'].astype(int) / df.loc[:,f'{name}-Max'].astype(int)
+            except:
+                print("xxx")
 
 
         for vg in self.master['tree']:
 
-            # print(f">>> Vorgesetzter: {vg}")
+            #print(f">>> Vorgesetzter: {vg}")
+
+            vg = "Teuteberg, Florian"
 
             if vg == "NaN":
                 # CEO
@@ -144,6 +226,16 @@ class Process:
 
             # open the XLSX writer
             writer = pd.ExcelWriter(name, engine='xlsxwriter')
+
+            try:
+                if self.master['span'][vg]['leader'] == 0 and self.master['span'][vg]['staff'] < 3:
+                    print(f'<<< remove {vg}')
+                    continue
+            except:
+                print("span does not work")
+
+            #dfl.to_excel(writer, 'top')
+
 
             for filter in filters:
                 # print(f'>>> Filter: {filter} ')
@@ -191,7 +283,7 @@ class Process:
                     dfc['Filter-Count'] = df[filter]
                     dfc = dfc.replace({'Filter-Count' : c.to_dict()})
                     # Drop all rows where the Filter-Count is below the min
-                    dfc = dfc.loc[dfc['Filter-Count'] > options.min_nr_of_resp]
+                    # dfc = dfc.loc[dfc['Filter-Count'] > options.min_nr_of_resp]
 
                 # Do not add empty sheets
                 if dfc.empty:
@@ -214,12 +306,31 @@ class Process:
                                  }, axis='columns')
                 if 'Filter-Count' in dfc.columns:
                     dfc = dfc.drop(columns=['Filter-Count'])
+                    pass
                 dfc = dfc.sort_values([filter, 'Stimmungswert'], ascending=[True, False])
 
+                # Simplify the Report
+                # --------------------------------------------------------------
+                # changed for report 2019 Q2
+                
+                if filter == "Gruppe":
+                    self.write_df_sheet(dfc, col_idx, writer, "Rückmeldungen", filter)
+                
+                dfc = dfc.drop(columns=['Motivation 1',
+                                        'Motivation 2',
+                                        'Verbesserung 1',
+                                        'Verbesserung 2',
+                                        'Stimmungswert'])
+                
+                dfc = dfc.drop_duplicates()
 
                 # Write dataframe to the xlsx sheet
                 # --------------------------------------------------------------
-
+                
+                self.write_df_sheet(dfc, col_idx, writer, sheet, filter)
+                
+                continue
+                """
                 # add data frame to sheet
                 dfc.to_excel(writer, sheet)
 
@@ -277,11 +388,53 @@ class Process:
                                               'value'   : idx + 1,
                                               'format'  : idx_format
                                              })
+                    
+
+                """
 
             # final save
             writer.save()
 
+            sys.exit(1)
 
+    def tokenzie(self, text):
+        print("---------------")
+        print(text)
+        from nltk.tokenize import word_tokenize
+        
+        tokenized_word=word_tokenize("why is this")
+        print(tokenized_word)
+            
+    def nlp(self):
+    
+        df = self.read_data_from_csv()
+        
+        df = df.drop(columns=['VGFIRST',
+                            'EMAIL',
+                            'VGLAST',
+                            'Abteilung',
+                            'Team',
+                            'first_name',
+                            'last_name',
+                            'Unnamed: 14', 'Unnamed: 15', 'Unnamed: 16',
+                            'Unnamed: 17', 'Unnamed: 18', 'Unnamed: 19', 'Unnamed: 20',
+                            'Unnamed: 21', 'Unnamed: 22', 
+                            'Motivation 1', 'Motivation 2'
+                            ])
+
+        # Reduce all columnes used as layer to the ID
+        #df['Gruppe'] = df['Gruppe'].map(self.get_id)
+
+        df['Verbesserung 1'].map(self.tokenzie)
+           
+        print(df.columns)
+        
+        
+        # open the XLSX writer
+        writer = pd.ExcelWriter('nlp.xlsx', engine='xlsxwriter')
+        df.to_excel(writer, 'x')
+        writer.save()
+        
 
 if __name__ == "__main__":
 
@@ -303,4 +456,5 @@ if __name__ == "__main__":
     (options, args) = parser.parse_args()
 
     x = Process(options)
-    x.read_survey()
+    #x.read_survey()
+    x.nlp()

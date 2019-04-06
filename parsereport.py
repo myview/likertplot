@@ -303,3 +303,4 @@ if __name__ == "__main__":
 
     run = Process(options)
     run.write_master_to_json()
+    run.create_collector(options)

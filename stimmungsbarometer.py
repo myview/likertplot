@@ -6,16 +6,34 @@ import pandas as pd
 import json
 import sys
 import re
+import os
+from datetime import datetime
 
 class Process:
+
 
     def __init__(self, options):
         """
         """
         self.options = options
-        with open('master.json') as json_file:
+
+        # Set directory where the file is located
+        path = os.path.abspath(options.filename)
+        self.path = os.path.dirname(path)
+        self.filename = os.path.basename(path)
+
+        print(f'> set working path to: {self.path}')
+        print(f'> set file: {self.filename}')
+
+        with open(os.path.join(self.path, 'history-2019-01-01.json')) as json_file:
+            self.history_2 = json.load(json_file)
+
+        with open(os.path.join(self.path, 'master.json')) as json_file:
             self.master = json.load(json_file)
 
+        self.history = {}
+
+        self.date = datetime.strptime(options.date, '%Y.%M.%d')
 
     def get_id(self, name):
 
@@ -56,7 +74,7 @@ class Process:
         return res
 
     def write_df_sheet(self, df, col_idx, writer, sheet, filter):
-    
+
         # Write dataframe to the xlsx sheet
         # --------------------------------------------------------------
 
@@ -78,6 +96,8 @@ class Process:
         part_format = workbook.add_format({'num_format': '0%'})
         floa_format = workbook.add_format({'num_format': '#,##0.00'})
 
+        """
+        TODO FIXME
         worksheet.set_column(col_idx.index(f'{filter}-%') + 1,
                     col_idx.index(f'{filter}-%') + 1,
                     width = 10, cell_format = part_format)
@@ -87,7 +107,7 @@ class Process:
                             width = 10,
                             cell_format = floa_format
                             )
-
+        """
         worksheet.set_column(col_idx.index('Motivation 1') + 1,
                             col_idx.index('Verbesserung 2') + 1,
                             width = 40,
@@ -116,11 +136,12 @@ class Process:
                                       'criteria': "=",
                                       'value'   : idx + 1,
                                       'format'  : idx_format
-                                     })    
+                                     })
 
-    
+
     def read_data_from_csv(self):
-        df = pd.read_csv(self.options.filename)
+
+        df = pd.read_csv(os.path.join(self.path,self.filename))
 
         # Remove SurveyMonkey columns not required
         df = df.drop(columns=['respondent_id',
@@ -150,14 +171,127 @@ class Process:
             })
 
         return df
-    
-    
 
-    
+
+    def individual_report(self, df, vg, filters):
+
+        res = []
+        res = self.rec_add_to(vg, res, self.master['tree'])
+
+        dfl = df.copy(deep=True)
+        dfl = dfl.loc[ dfl['Vorgesetzter'].isin(res)]
+
+        # open the XLSX writer
+        filename = os.path.join(self.path, self.master['filenames'][vg])
+        writer = pd.ExcelWriter(filename, engine='xlsxwriter')
+
+        try:
+            if self.master['span'][vg]['leader'] == 0 and self.master['span'][vg]['staff'] < 3:
+                print(f'<<< remove {vg}')
+                return
+        except:
+            print("span check not supported")
+
+        for filter in filters:
+
+            sheet  = filter
+
+            dfc= dfl.copy(deep=True)
+
+            col_idx = [
+                filter,
+                'Stimmungswert',
+                f'{filter}-Mean',
+                f'{filter}-Count',
+                f'{filter}-Max',
+                f'{filter}-%',
+                'Motivation 1',
+                'Motivation 2',
+                'Verbesserung 1',
+                'Verbesserung 2',
+                f'{filter}-2019-01-01'
+                ]
+
+            dfc = dfl.reindex(col_idx, axis=1)
+
+            # Remove all responses where its count is below minimum
+            # --------------------------------------------------------------
+
+            # Remove all rows where the possible max response is too low
+            dfc = dfc.loc[dfc[f'{filter}-Max'] > self.options.min_nr_of_resp]
+
+            # Remove all rows where the response cound is too low
+            # independant of the management hierarchie
+            # TODO dfc = dfc.loc[dfc[f'{filter}-Count'] > options.min_nr_of_resp]
+
+            # Check the number of responses based on the current filter
+            # ... this is special case when the filter removes some values
+            # ... from the total count. Occures when the same group id
+            # ... is used over different management levels
+
+            if not dfc.empty:
+                # if not already empty, check all single reports
+
+                # get the counts grouped by the column with the name of
+                # the filter and add it to the new column Filter-Count
+                c = dfc.groupby(filter).count()['Stimmungswert']
+                dfc['Filter-Count'] = df[filter]
+                dfc = dfc.replace({'Filter-Count' : c.to_dict()})
+                # Drop all rows where the Filter-Count is below the min
+                # dfc = dfc.loc[dfc['Filter-Count'] > options.min_nr_of_resp]
+
+            # Do not add empty sheets
+            if dfc.empty:
+                return
+
+            # Switch back to full name
+            # --------------------------------------------------------------
+
+            function_name = "get_%s_by_id" % filter.lower().replace('-', '')
+            function = getattr(self, function_name)
+            dfc[filter] = dfc[filter].apply(function)
+
+            # Simplify column names and sort
+            # --------------------------------------------------------------
+            dfc = dfc.rename({
+                f'{filter}-%'    : 'Beteiligung',
+                f'{filter}-Mean' : 'Mittelwert',
+                f'{filter}-Count': 'Anzahl',
+                f'{filter}-Max'  : 'Max',
+                f'{filter}-2019.01.01' : '2019.01.01',
+                             }, axis='columns')
+            if 'Filter-Count' in dfc.columns:
+                dfc = dfc.drop(columns=['Filter-Count'])
+                pass
+            dfc = dfc.sort_values([filter, 'Stimmungswert'], ascending=[True, False])
+
+            # Simplify the Report
+            # --------------------------------------------------------------
+            # changed for report 2019 Q2
+
+            if filter == "Gruppe":
+                self.write_df_sheet(dfc, col_idx, writer, "Rückmeldungen", filter)
+                return
+
+            dfc = dfc.drop(columns=['Motivation 1',
+                                    'Motivation 2',
+                                    'Verbesserung 1',
+                                    'Verbesserung 2',
+                                    'Stimmungswert'])
+
+            dfc = dfc.drop_duplicates()
+
+            # Write dataframe to the xlsx sheet
+            # --------------------------------------------------------------
+            self.write_df_sheet(dfc, col_idx, writer, sheet, filter)
+
+        # final save
+        writer.save()
+
+
     def read_survey(self):
 
         df = self.read_data_from_csv()
-
 
         filters = ['Vorgesetzter', 'Gruppe', 'Team', 'Sub-Abteilung', 'Abteilung']
 
@@ -180,7 +314,7 @@ class Process:
         df = pd.merge(df, abt, on='Mitarbeiter')
 
         # Calculate all filters
-               
+
         for name in filters:
 
             # Reduce all columnes used as layer to the ID
@@ -189,219 +323,61 @@ class Process:
             df[f'{name}-Mean'] = df[name]
             df[f'{name}-Count'] = df[name]
             df[f'{name}-Max'] = df[name]
+            df[f'{name}-2019-01-01'] = df[name]
 
             mean  = df.groupby(name).mean(numeric_only=True).to_dict()['Stimmungswert']
             count = df.groupby(name).count()['Stimmungswert'].to_dict()
-            
-            print(mean, count)
-            
+
+            # create dictionary for history
+            self.history[name] = {}
+            self.history[name] = mean
+
+            #df = df.replace({f'2019-01-01' : mean})
+
+            df[f'{name}-2019-01-01'] = df[f'{name}-2019-01-01'].map(self.history_2[name])
+
             df = df.replace({f'{name}-Mean' : mean})
             df = df.replace({f'{name}-Count': count})
             df = df.replace({f'{name}-Max'  : self.master['counts'][name]})
-            
 
             try:
                 df[f'{name}-%'] = df.loc[:,f'{name}-Count'].astype(int) / df.loc[:,f'{name}-Max'].astype(int)
             except:
                 print("xxx")
 
+        # Store the history date into an external file for later use
+        filename = os.path.join(self.path, f"history-{self.date.strftime('%Y-%M-%d')}.json")
+        with open(filename, "w") as historyfile:
+            json.dump(self.history, historyfile, indent=4, sort_keys=True)
+
+
+        self.individual_report(df, self.master["ceo"], filters)
+
+        if options.ceo_only == True:
+            sys.exit(1)
 
         for vg in self.master['tree']:
 
-            if vg == "NaN":
-                # CEO
+            if vg == "NaN" or vg == self.master["ceo"]:
                 continue
 
-            name = self.master['filenames'][vg]
+            self.individual_report(df, vg, filters)
 
-            res = []
-            res = self.rec_add_to(vg, res, self.master['tree'])
 
-            dfl = df.copy(deep=True)
-            dfl = dfl.loc[ dfl['Vorgesetzter'].isin(res)]
 
-            # open the XLSX writer
-            writer = pd.ExcelWriter(name, engine='xlsxwriter')
-
-            try:
-                if self.master['span'][vg]['leader'] == 0 and self.master['span'][vg]['staff'] < 3:
-                    print(f'<<< remove {vg}')
-                    continue
-            except:
-                print("span check not supported")
-
-            for filter in filters:
-                # print(f'>>> Filter: {filter} ')
-
-                sheet  = filter
-
-                dfc= dfl.copy(deep=True)
-
-                col_idx = [
-                    filter,
-                    'Stimmungswert',
-                    f'{filter}-Mean',
-                    f'{filter}-Count',
-                    f'{filter}-Max',
-                    f'{filter}-%',
-                    'Motivation 1',
-                    'Motivation 2',
-                    'Verbesserung 1',
-                    'Verbesserung 2'
-                    ]
-
-                dfc = dfl.reindex(col_idx, axis=1)
-
-                # Remove all responses where its count is below minimum
-                # --------------------------------------------------------------
-
-                # Remove all rows where the possible max response is too low
-                dfc = dfc.loc[dfc[f'{filter}-Max'] > self.options.min_nr_of_resp]
-
-                # Remove all rows where the response cound is too low
-                # independant of the management hierarchie
-                # TODO dfc = dfc.loc[dfc[f'{filter}-Count'] > options.min_nr_of_resp]
-
-                # Check the number of responses based on the current filter
-                # ... this is special case when the filter removes some values
-                # ... from the total count. Occures when the same group id
-                # ... is used over different management levels
-
-                if not dfc.empty:
-                    # if not already empty, check all single reports
-
-                    # get the counts grouped by the column with the name of
-                    # the filter and add it to the new column Filter-Count
-                    c = dfc.groupby(filter).count()['Stimmungswert']
-                    dfc['Filter-Count'] = df[filter]
-                    dfc = dfc.replace({'Filter-Count' : c.to_dict()})
-                    # Drop all rows where the Filter-Count is below the min
-                    # dfc = dfc.loc[dfc['Filter-Count'] > options.min_nr_of_resp]
-
-                # Do not add empty sheets
-                if dfc.empty:
-                    continue
-
-                # Switch back to full name
-                # --------------------------------------------------------------
-
-                function_name = "get_%s_by_id" % filter.lower().replace('-', '')
-                function = getattr(self, function_name)
-                dfc[filter] = dfc[filter].apply(function)
-
-                # Simplify column names and sort
-                # --------------------------------------------------------------
-                dfc = dfc.rename({
-                    f'{filter}-%'    : 'Beteiligung',
-                    f'{filter}-Mean' : 'Mittelwert',
-                    f'{filter}-Count': 'Anzahl',
-                    f'{filter}-Max'  : 'Max'
-                                 }, axis='columns')
-                if 'Filter-Count' in dfc.columns:
-                    dfc = dfc.drop(columns=['Filter-Count'])
-                    pass
-                dfc = dfc.sort_values([filter, 'Stimmungswert'], ascending=[True, False])
-
-                # Simplify the Report
-                # --------------------------------------------------------------
-                # changed for report 2019 Q2
-                
-                if filter == "Gruppe":
-                    self.write_df_sheet(dfc, col_idx, writer, "Rückmeldungen", filter)
-                
-                dfc = dfc.drop(columns=['Motivation 1',
-                                        'Motivation 2',
-                                        'Verbesserung 1',
-                                        'Verbesserung 2',
-                                        'Stimmungswert'])
-                
-                dfc = dfc.drop_duplicates()
-
-                # Write dataframe to the xlsx sheet
-                # --------------------------------------------------------------
-                
-                self.write_df_sheet(dfc, col_idx, writer, sheet, filter)
-                
-                continue
-                """
-                # add data frame to sheet
-                dfc.to_excel(writer, sheet)
-
-                last_row = dfc.shape[0] - 1
-                last_col = dfc.shape[1] - 1
-
-                # define and set number formats
-                workbook  = writer.book
-                worksheet = writer.sheets[sheet]
-
-                #https://xlsxwriter.readthedocs.io/worksheet.html#autofilter
-                worksheet.autofilter(0, 0, last_row, last_col)
-
-                text_format = workbook.add_format()
-                text_format.set_text_wrap()
-                part_format = workbook.add_format({'num_format': '0%'})
-                floa_format = workbook.add_format({'num_format': '#,##0.00'})
-
-                worksheet.set_column(col_idx.index(f'{filter}-%') + 1,
-                            col_idx.index(f'{filter}-%') + 1,
-                            width = 10, cell_format = part_format)
-
-                worksheet.set_column(col_idx.index(f'{filter}-Mean') + 1,
-                                    col_idx.index(f'{filter}-Mean') + 1,
-                                    width = 10,
-                                    cell_format = floa_format
-                                    )
-
-                worksheet.set_column(col_idx.index('Motivation 1') + 1,
-                                    col_idx.index('Verbesserung 2') + 1,
-                                    width = 40,
-                                    cell_format = text_format
-                                    )
-
-                colors = [  "#F8696B",
-                            "#FBAA77",
-                            "#FFEB84",
-                            "#E9E583",
-                            "#D3DF82",
-                            "#BDD881",
-                            "#A6D27F",
-                            "#90CB7E",
-                            "#7AC57D",
-                            "#63BE7B"
-                         ]
-
-                for idx in range(0, len(colors)):
-                    idx_format = workbook.add_format({'bg_color': colors[idx]})
-                    worksheet.conditional_format(0,
-                                             col_idx.index('Stimmungswert') + 1,
-                                             last_row + 1,
-                                             col_idx.index('Stimmungswert') + 1,
-                                             {'type'    : 'cell',
-                                              'criteria': "=",
-                                              'value'   : idx + 1,
-                                              'format'  : idx_format
-                                             })
-                    
-
-                """
-
-            # final save
-            writer.save()
-
-            sys.exit(1)
 
     def tokenzie(self, text):
         print("---------------")
         print(text)
         from nltk.tokenize import word_tokenize
-        
+
         tokenized_word=word_tokenize("why is this")
         print(tokenized_word)
-            
+
     def nlp(self):
-    
+
         df = self.read_data_from_csv()
-        
+
         df = df.drop(columns=['VGFIRST',
                             'EMAIL',
                             'VGLAST',
@@ -411,7 +387,7 @@ class Process:
                             'last_name',
                             'Unnamed: 14', 'Unnamed: 15', 'Unnamed: 16',
                             'Unnamed: 17', 'Unnamed: 18', 'Unnamed: 19', 'Unnamed: 20',
-                            'Unnamed: 21', 'Unnamed: 22', 
+                            'Unnamed: 21', 'Unnamed: 22',
                             'Motivation 1', 'Motivation 2'
                             ])
 
@@ -419,15 +395,15 @@ class Process:
         #df['Gruppe'] = df['Gruppe'].map(self.get_id)
 
         df['Verbesserung 1'].map(self.tokenzie)
-           
+
         print(df.columns)
-        
-        
+
+
         # open the XLSX writer
         writer = pd.ExcelWriter('nlp.xlsx', engine='xlsxwriter')
         df.to_excel(writer, 'x')
         writer.save()
-        
+
 if __name__ == "__main__":
 
     parser = OptionParser()
@@ -436,8 +412,15 @@ if __name__ == "__main__":
         action="store_true", dest="verbose", default="False",
         help="Verbose prints enabled")
 
+    parser.add_option("-c", "--ceo-only",
+        action="store_true", dest="ceo_only", default="False",
+        help="Only the CEO report")
+
     parser.add_option("-x", "--exclude",
         type="int", dest="min_nr_of_resp", default="3")
+
+    parser.add_option("-d", "--date", dest="date",
+                  help="date of the survey")
 
     parser.add_option("-f", "--file", dest="filename",
                   help="write report to FILE", metavar="FILE")
@@ -448,5 +431,5 @@ if __name__ == "__main__":
     (options, args) = parser.parse_args()
 
     x = Process(options)
-    #x.read_survey()
-    x.nlp()
+    x.read_survey()
+    #x.nlp()

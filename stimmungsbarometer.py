@@ -179,7 +179,10 @@ class Process:
         res = self.rec_add_to(vg, res, self.master['tree'])
 
         dfl = df.copy(deep=True)
-        dfl = dfl.loc[ dfl['Vorgesetzter'].isin(res)]
+
+        #for x in dfl[f'Vorgesetzter-Max']:
+            #print(x)
+        #dfl = dfl.loc[ dfl['Vorgesetzter'].isin(res)]
 
         # open the XLSX writer
         filename = os.path.join(self.path, self.master['filenames'][vg])
@@ -271,7 +274,6 @@ class Process:
 
             if filter == "Gruppe":
                 self.write_df_sheet(dfc, col_idx, writer, "Rückmeldungen", filter)
-                return
 
             dfc = dfc.drop(columns=['Motivation 1',
                                     'Motivation 2',
@@ -308,6 +310,10 @@ class Process:
         df['Stimmungswert'] = df['Stimmungswert'].astype(int)
         df['Vorgesetzter']  = df.apply(lambda row: row['VGLAST'] + ", " + row['VGFIRST'], axis=1)
         df['Mitarbeiter']   = df.apply(lambda row: row['last_name'] + ", " + row['first_name'], axis=1)
+
+        # TODO Workaround:
+        df['Vorgesetzter'] = df['Vorgesetzter'].replace("Raki?, Nikola", "Raki\u0107, Nikola")
+        df['Vorgesetzter'] = df['Vorgesetzter'].replace("Mili?i?, Ivana", "Mili\u010di\u0107, Ivana")
 
         # NOTE Workaround, we do nhat have the sub-abt information
         abt = pd.read_json('collector-abt.json')

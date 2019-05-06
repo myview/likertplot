@@ -949,7 +949,7 @@ if __name__ == "__main__":
     x = Process(options)
     x.h.import_history(x.path)
     #x.h.get_entries_as_sorted_list()
-    #x.export_history()
+    x.export_history()
     x.run()
 
     #x.h.update_history_fies_from_xlsx(x.path, "history.xlsx")

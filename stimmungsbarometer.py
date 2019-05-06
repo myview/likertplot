@@ -407,6 +407,7 @@ class Sheet:
         """
         self.sheet = name
 
+
 class Basic(Sheet):
 
     def __init__(self, survey, filter, writer, collector, history, options):
@@ -416,33 +417,64 @@ class Basic(Sheet):
         self.sheet = filter
         self.writer = writer
         self.options = options
+        self.main_col = filter
         self.collector = collector
         self.history = history
+
+        self.check_max_response()
+
+        self.col_idx = [
+            self.main_col,
+            f'{self.main_col}-Mean',
+            f'{self.main_col}-Count',
+            f'{self.main_col}-Max',
+            f'{self.main_col}-%',
+            'Veränderung'
+        ]
+
+    def add_column(self, index, columnname):
+        """
+
+        :param index:
+        :param columnname:
+        :return:
+        """
+        self.col_idx.insert(index, columnname)
+        try:
+            self.survey.swap_from_id_to_fulltext(columnname, self.collector)
+        except:
+            pass
+
+
+    def check_max_response(self):
+        """
+
+        :return:
+        """
+        # Remove all rows where the possible max response is too low
+        self.survey.df = self.survey.df.loc[
+            self.survey.df[f'{self.main_col}-Max'] > self.options.min_nr_of_resp
+            ]
+
+
 
     def set_basic_columns(self):
         """
         Set final index of the columns (column order)
         :return:
         """
-
-        col_idx = [
-            self.sheet,
-            f'{self.sheet}-Mean',
-            f'{self.sheet}-Count',
-            f'{self.sheet}-Max',
-            f'{self.sheet}-%',
-        ]
-        self.survey.df = self.survey.df.reindex(col_idx, axis=1)
+        self.survey.df = self.survey.df.reindex(self.col_idx, axis=1)
 
         # Remove all rows where the possible max response is too low
-        self.survey.df = self.survey.df.loc[
-            self.survey.df[f'{self.sheet}-Max'] > self.options.min_nr_of_resp
-        ]
+        #self.survey.df = self.survey.df.loc[
+        #    self.survey.df[f'{self.main_col}-Max'] > self.options.min_nr_of_resp
+        #]
+        #
+        #self.add_history()
+        #self.finalize()
 
-        self.survey.sort(self.sheet)
-        self.survey.drop_duplicates()
 
-        #print(self.history.get_entries_as_sorted_list())
+    def add_history(self):
 
         for date in self.history.get_entries_as_sorted_list():
             #print(date)
@@ -452,19 +484,30 @@ class Basic(Sheet):
                 date=datetime.strptime(date, '%Y.%m.%d')
             )
 
+        self.survey.df['Veränderung'] = self.survey.df[f'{self.main_col}-Mean'] - \
+                                        self.survey.df['2019.01.01']
 
+    def finalize(self):
 
+        print(f"> finalize {self.sheet}")
 
-        self.survey.swap_from_id_to_fulltext(self.sheet, self.collector)
-
+        # Fix column naming
         self.survey.df = self.survey.df.rename({
-                f'{self.sheet}-%': 'Beteiligung',
-                f'{self.sheet}-Mean': 'Mittelwert',
-                f'{self.sheet}-Count': 'Anzahl',
-                f'{self.sheet}-Max': 'Max',
-            }, axis='columns')
+            f'{self.main_col}-%':      'Beteiligung',
+            f'{self.main_col}-Mean':   'Mittelwert',
+            f'{self.main_col}-Count':  'Anzahl',
+            f'{self.main_col}-Max':    'Max',
+        }, axis='columns')
 
-        #self.survey.df = self.survey.df.dropna(axis='columns')
+        # Sort, remove duplicates, switch to full text names
+        self.survey.sort(self.main_col)
+        self.survey.drop_duplicates()
+        self.survey.swap_from_id_to_fulltext(self.main_col, self.collector)
+
+        # Remove all columns witch are fully empty
+        non_null_columns = [col for col in self.survey.df.columns
+                            if self.survey.df.loc[:, col].notna().any()]
+        self.survey.df = self.survey.df.reindex(non_null_columns, axis=1)
 
 
         self.last_row = self.survey.df.shape[0] - 1
@@ -472,12 +515,17 @@ class Basic(Sheet):
         self.col_idx  = self.survey.df.columns.values.tolist()
 
 
-
     def write(self):
         """
         Write the dataframe to the sheet
         :return:
         """
+
+        # check if sheet is emmpty
+        if not self.col_idx:
+            print("> sheet is empty")
+            return False
+
         self.survey.df.to_excel(self.writer, self.sheet)
 
 
@@ -486,21 +534,38 @@ class Basic(Sheet):
         worksheet = self.writer.sheets[self.sheet]
 
         #https://xlsxwriter.readthedocs.io/worksheet.html#autofilter
-        worksheet.autofilter(0, 0, self.last_row, self.last_col)
+        worksheet.autofilter(0, 0, self.last_row + 1, self.last_col + 1)
 
         text_format = workbook.add_format()
         text_format.set_text_wrap()
         part_format = workbook.add_format({'num_format': '0%'})
         floa_format = workbook.add_format({'num_format': '#,##0.00'})
 
+        if "Veränderung" in self.col_idx:
+            worksheet.conditional_format(0,
+                                     self.col_idx.index('Veränderung') + 1,
+                                     self.last_row + 1,
+                                     self.col_idx.index('Veränderung') + 1,
+                                     {'type': 'data_bar',
+                                      'data_bar_2010': True
+                                     })
+
+            worksheet.set_column(
+                    self.col_idx.index('Veränderung') + 1,
+                    self.col_idx.index('Veränderung') + 1,
+                    width = 10,
+                    cell_format = floa_format
+                    )
+
         worksheet.set_column(
-                    self.col_idx.index(self.sheet) + 1,
-                    self.col_idx.index(self.sheet) + 1,
+                    self.col_idx.index(self.main_col) + 1,
+                    self.col_idx.index(self.main_col) + 1,
                     width = 40,
                     cell_format = text_format
                     )
 
-        worksheet.set_column(
+        if "Beteiligung" in self.survey.df.columns.values.tolist():
+            worksheet.set_column(
                     self.col_idx.index('Beteiligung') + 1,
                     self.col_idx.index('Beteiligung') + 1,
                     width = 10, cell_format = part_format
@@ -508,22 +573,113 @@ class Basic(Sheet):
 
         try:
             worksheet.set_column(
-                self.col_idx.index(self.history.get_entries_as_sorted_list()[1]),
+                self.col_idx.index(self.history.get_entries_as_sorted_list()[0]),
                 self.last_col + 1,
                 width = 10,
                 cell_format = floa_format
             )
-        except:
+        except Exception as e:
+            print(self.history.get_entries_as_sorted_list())
+            pprint(e)
+            print("<exepion> set float")
             pass
 
-
-        worksheet.set_column(
+        if "Mittelwert" in self.survey.df.columns.values.tolist():
+            worksheet.set_column(
                     self.col_idx.index('Mittelwert') + 1,
                     self.col_idx.index('Mittelwert') + 1,
                     width = 10,
                     cell_format = floa_format
                     )
 
+    def add_vg_abteilung(self):
+        """
+        TODO A big HACK
+        :return:
+        """
+        d = self.collector.master['ma-to-abt'].copy()
+        d['Vorgesetzter'] = d.pop("Mitarbeiter")
+        df = pd.DataFrame.from_dict(d)
+        self.survey.df = pd.merge(self.survey.df, df, on="Vorgesetzter")
+
+        # FIX ME y (merge)
+        # pprint(self.survey.df.columns.values.tolist())
+
+        self.add_column(1, "Sub-Abteilung_y")
+
+class ReportFeedback(Basic):
+
+    def __init__(self, survey, writer, collector, history, options):
+        """
+        """
+        self.survey = survey
+        self.sheet = "Feedback"
+        self.writer = writer
+        self.options = options
+        self.main_col = "Gruppe"
+        self.collector = collector
+        self.history = history
+        self.check_max_response()
+
+        self.col_idx = [
+            self.main_col,
+            "Stimmungswert",
+            "Motivation 1",
+            "Motivation 2",
+            "Verbesserung 1",
+            "Verbesserung 2"
+        ]
+
+    def set_formats(self):
+        """
+
+        :return:
+        """
+        # check if sheet is emmpty
+        if not self.col_idx:
+            print("> sheet is empty")
+            return False
+
+        # define and setP number formats
+        workbook  = self.writer.book
+        worksheet = self.writer.sheets[self.sheet]
+
+        text_format = workbook.add_format()
+        text_format.set_text_wrap()
+
+        try:
+            worksheet.set_column(
+                self.col_idx.index('Motivation 1') + 1,
+                self.col_idx.index('Verbesserung 2') + 1,
+                width = 40,
+                cell_format = text_format
+                )
+        except:
+            pass
+
+        colors = [  "#F8696B",
+                    "#FBAA77",
+                    "#FFEB84",
+                    "#E9E583",
+                    "#D3DF82",
+                    "#BDD881",
+                    "#A6D27F",
+                    "#90CB7E",
+                    "#7AC57D",
+                    "#63BE7B"
+                 ]
+
+        for idx in range(0, len(colors)):
+            idx_format = workbook.add_format({'bg_color': colors[idx]})
+            worksheet.conditional_format(0,
+                                     self.col_idx.index('Stimmungswert') + 1,
+                                     self.last_row + 1,
+                                     self.col_idx.index('Stimmungswert') + 1,
+                                     {'type'    : 'cell',
+                                      'criteria': "=",
+                                      'value'   : idx + 1,
+                                      'format'  : idx_format
+                                     })
 
 class Process:
 
@@ -559,10 +715,6 @@ class Process:
         self.s.add_columns_with_subscriber_statistics(filters, self.c.master['counts'])
         self.s.add_column_with_the_calulated_mean(filters)
 
-        # TODO
-        #self.s.add_column_with_history_mean(filters, self.h.history['2019.01.01'],
-        #                                    datetime.strptime("2019.01.01", '%Y.%m.%d'))
-
     def get_id(self, name):
 
         """
@@ -590,7 +742,7 @@ class Process:
         worksheet = writer.sheets[sheet]
 
         #https://xlsxwriter.readthedocs.io/worksheet.html#autofilter
-        worksheet.autofilter(0, 0, last_row, last_col)
+        worksheet.autofilter(0, 0, last_row + 1, last_col + 1)
 
         text_format = workbook.add_format()
         text_format.set_text_wrap()
@@ -651,135 +803,57 @@ class Process:
 
         s = self.s.get_copy(vg, self.c)
 
-        # FIXME
-        dfl = s.df
-
         # open the XLSX writer
         filename = os.path.join(self.path, self.c.master['filenames'][vg])
         writer = pd.ExcelWriter(filename, engine='xlsxwriter')
 
+        print("<<<< 1")
+        division = ReportFeedback(s.get_copy(),writer, self.c, self.h, self.options)
+        print("<<<< 2")
+        division.set_basic_columns()
+        print("<<<< 3")
+        division.finalize()
+        division.write()
+        division.set_formats()
 
         division = Basic(s.get_copy(), "Vorgesetzter", writer, self.c, self.h, self.options)
+        division.add_vg_abteilung()
         division.set_basic_columns()
+        division.add_history()
+        division.finalize()
         division.write()
 
         division = Basic(s.get_copy(), "Gruppe", writer, self.c, self.h, self.options)
+        division.add_column(1, "Abteilung")
         division.set_basic_columns()
+        division.add_history()
+        division.finalize()
         division.write()
 
         division = Basic(s.get_copy(), "Team", writer, self.c, self.h, self.options)
+        division.add_column(1, "Abteilung")
         division.set_basic_columns()
+        division.add_history()
+        division.finalize()
         division.write()
 
         division = Basic(s.get_copy(), "Sub-Abteilung", writer, self.c, self.h, self.options)
         division.set_basic_columns()
+        division.add_history()
+        division.finalize()
         division.write()
 
         division = Basic(s.get_copy(), "Abteilung", writer, self.c, self.h, self.options)
         division.set_basic_columns()
+        division.add_history()
+        division.finalize()
         division.write()
 
         division = Basic(s.get_copy(), "Unternehmen", writer, self.c, self.h, self.options)
         division.set_basic_columns()
+        division.add_history()
+        division.finalize()
         division.write()
-
-        filters = []
-
-
-        for filter in filters:
-
-            sheet  = filter
-
-            dfc= dfl.copy(deep=True)
-
-            col_idx = [
-                filter,
-                'Stimmungswert',
-                f'{filter}-Mean',
-                f'{filter}-Count',
-                f'{filter}-Max',
-                f'{filter}-%',
-                'Motivation 1',
-                'Motivation 2',
-                'Verbesserung 1',
-                'Verbesserung 2',
-                f'{filter}-2019-01-01'
-                ]
-
-            dfc = dfl.reindex(col_idx, axis=1)
-
-            # Remove all responses where its count is below minimum
-            # --------------------------------------------------------------
-
-            # Remove all rows where the possible max response is too low
-            try:
-                dfc = dfc.loc[dfc[f'{filter}-Max'] > self.options.min_nr_of_resp]
-            except:
-                print(filter)
-                print('yyyy')
-            # Remove all rows where the response cound is too low
-            # independant of the management hierarchie
-            # TODO dfc = dfc.loc[dfc[f'{filter}-Count'] > options.min_nr_of_resp]
-
-            # Check the number of responses based on the current filter
-            # ... this is special case when the filter removes some values
-            # ... from the total count. Occures when the same group id
-            # ... is used over different management levels
-
-            if not dfc.empty:
-                # if not already empty, check all single reports
-
-                # get the counts grouped by the column with the name of
-                # the filter and add it to the new column Filter-Count
-                c = dfc.groupby(filter).count()['Stimmungswert']
-                dfc['Filter-Count'] = df[filter]
-                dfc = dfc.replace({'Filter-Count' : c.to_dict()})
-                # Drop all rows where the Filter-Count is below the min
-                # dfc = dfc.loc[dfc['Filter-Count'] > options.min_nr_of_resp]
-
-            # Do not add empty sheets
-            if dfc.empty:
-                return
-
-            # Switch back to full name
-            # --------------------------------------------------------------
-
-            function_name = "get_%s_by_id" % filter.lower().replace('-', '')
-            function = getattr(self.c, function_name)
-            dfc[filter] = dfc[filter].apply(function)
-
-            # Simplify column names and sort
-            # --------------------------------------------------------------
-            dfc = dfc.rename({
-                f'{filter}-%'    : 'Beteiligung',
-                f'{filter}-Mean' : 'Mittelwert',
-                f'{filter}-Count': 'Anzahl',
-                f'{filter}-Max'  : 'Max',
-                f'{filter}-2019.01.01' : '2019.01.01',
-                             }, axis='columns')
-            if 'Filter-Count' in dfc.columns:
-                dfc = dfc.drop(columns=['Filter-Count'])
-                pass
-            dfc = dfc.sort_values([filter, 'Stimmungswert'], ascending=[True, False])
-
-            # Simplify the Report
-            # --------------------------------------------------------------
-            # changed for report 2019 Q2
-
-            if filter == "Gruppe":
-                self.write_df_sheet(dfc, col_idx, writer, "Rückmeldungen", filter)
-
-            dfc = dfc.drop(columns=['Motivation 1',
-                                    'Motivation 2',
-                                    'Verbesserung 1',
-                                    'Verbesserung 2',
-                                    'Stimmungswert'])
-
-            dfc = dfc.drop_duplicates()
-
-            # Write dataframe to the xlsx sheet
-            # --------------------------------------------------------------
-            self.write_df_sheet(dfc, col_idx, writer, sheet, filter)
 
         # final save
         writer.save()

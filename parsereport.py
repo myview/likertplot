@@ -12,7 +12,7 @@ class Process:
     def __init__(self, options):
 
         # Configure the layers
-        self.layers = ['Abteilung', 'Sub-Abteilung', 'Team', 'Gruppe']
+        self.layers = ['Abteilung', 'Sub-Abteilung', 'Team', 'Gruppe','Unternehmen']
 
         # Create an empty data master structure
         self.master = {}
@@ -21,6 +21,7 @@ class Process:
             'Abteilung'     : {},
             'Sub-Abteilung' : {},
             'Team'          : {},
+            'Unternehmen'
             'Gruppe'        : {} }
         self.master['tree'] = {}
         self.master['filenames'] = {}
@@ -58,11 +59,14 @@ class Process:
     def _subabteilung_id_to_master(self, name):
         self._id_to_master(name, 'Sub-Abteilung')
 
+    def _unternehmen_id_to_master(self, name):
+        self._id_to_master(name, 'Unternehmen')
+
     def _abteilung_id_to_master(self, name):
         self._id_to_master(name, 'Abteilung')
 
     def _id_to_master(self, name, layer):
-        m = re.search('^([A-Z]{2,}|[0-9]{2,})-(.*)', name)
+        m = re.search('^([A-Z]{2,}|[A-Z]{2}[0-9]{2}|[0-9]{2,})-(.*)', name)
         i = m.group(1)
         t = m.group(2)
         if i not in self.master['id'][layer]:
@@ -110,6 +114,7 @@ class Process:
             'Nachname',
             'Vorname',
             'Sub-Abteilung',
+            'Unternehmen'
             ]
 
         for column_name in df.columns.tolist():
@@ -124,6 +129,8 @@ class Process:
         #print( df.columns.tolist())
 
         df.to_json('collector-abt.json')
+
+        self.master['ma-to-abt'] = json.loads(df.to_json())
 
     def get_low_management_span(self, options):
         """list bottom leaders with low management span
@@ -159,7 +166,7 @@ class Process:
             elif ( fs < 3 and fs > 0):
                 print(vg, fs, vn)
 
-        pprint(self.master['span'])
+        #pprint(self.master['span'])
 
     def create_vg_tree(self, options):
 
@@ -171,6 +178,7 @@ class Process:
             'Nachname',
             'Vorname',
             'Vorgesetzter',
+            'Unternehmen',
             'Abteilung',
             'Sub-Abteilung',
             'Team',
@@ -185,6 +193,7 @@ class Process:
         df['Team'].map(self._team_id_to_master)
         df['Sub-Abteilung'].map(self._subabteilung_id_to_master)
         df['Abteilung'].map(self._abteilung_id_to_master)
+        df['Unternehmen'].map(self._unternehmen_id_to_master)
 
         # Reduce all columnes used as layer to the ID
         for layer in self.layers:
@@ -233,7 +242,7 @@ class Process:
         """
         print(f'> write: {name}.json')
         with open(f'{name}.json', 'w') as outfile:
-            json.dump(self.master, outfile)
+            json.dump(self.master, outfile, indent=4)
 
 
     def create_collector(self, options):

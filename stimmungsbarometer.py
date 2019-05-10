@@ -394,8 +394,8 @@ class History:
                 if "Unternehmen" not in h: h["Unternehmen"] = {}
                 if "Abteilung" not in h: h["Abteilung"] = {}
             h[filter][key] = mean
-            pprint(h)
-            print(f"> write: {filename}")
+            #pprint(h)
+            #print(f"> write: {filename}")
             with open(os.path.join(path, filename), "w") as json_file:
                 json.dump(h, json_file, indent=4)
 
@@ -489,7 +489,7 @@ class Basic(Sheet):
 
     def finalize(self):
 
-        print(f"> finalize {self.sheet}")
+        #print(f"> finalize {self.sheet}")
 
         # Fix column naming
         self.survey.df = self.survey.df.rename({
@@ -579,9 +579,9 @@ class Basic(Sheet):
                 cell_format = floa_format
             )
         except Exception as e:
-            print(self.history.get_entries_as_sorted_list())
-            pprint(e)
-            print("<exepion> set float")
+            #print(self.history.get_entries_as_sorted_list())
+            #pprint(e)
+            #print("<exepion> set float")
             pass
 
         if "Mittelwert" in self.survey.df.columns.values.tolist():
@@ -609,14 +609,14 @@ class Basic(Sheet):
 
 class ReportFeedback(Basic):
 
-    def __init__(self, survey, writer, collector, history, options):
+    def __init__(self, survey, writer, collector, history, options, main_col = "Gruppe", sheet="Feedback Gruppe"):
         """
         """
         self.survey = survey
-        self.sheet = "Feedback"
+        self.sheet = sheet
         self.writer = writer
         self.options = options
-        self.main_col = "Gruppe"
+        self.main_col = main_col
         self.collector = collector
         self.history = history
         self.check_max_response()
@@ -694,8 +694,8 @@ class Process:
         self.path = os.path.dirname(path)
         self.filename = os.path.basename(path)
 
-        print(f'> set working path to: {self.path}')
-        print(f'> set file: {self.filename}')
+        #print(f'> set working path to: {self.path}')
+        #print(f'> set file: {self.filename}')
 
         self.h = History(datetime.strptime(options.date, '%Y.%m.%d'))
 
@@ -807,11 +807,14 @@ class Process:
         filename = os.path.join(self.path, self.c.master['filenames'][vg])
         writer = pd.ExcelWriter(filename, engine='xlsxwriter')
 
-        print("<<<< 1")
         division = ReportFeedback(s.get_copy(),writer, self.c, self.h, self.options)
-        print("<<<< 2")
         division.set_basic_columns()
-        print("<<<< 3")
+        division.finalize()
+        division.write()
+        division.set_formats()
+
+        division = ReportFeedback(s.get_copy(),writer, self.c, self.h, self.options, main_col="Vorgesetzter", sheet="Feedback direkt unterstellte MA")
+        division.set_basic_columns()
         division.finalize()
         division.write()
         division.set_formats()
@@ -883,12 +886,12 @@ class Process:
 
 
     def tokenzie(self, text):
-        print("---------------")
-        print(text)
+        #print("---------------")
+        #print(text)
         from nltk.tokenize import word_tokenize
 
         tokenized_word=word_tokenize("why is this")
-        print(tokenized_word)
+        #print(tokenized_word)
 
     def nlp(self):
 
@@ -912,7 +915,7 @@ class Process:
 
         df['Verbesserung 1'].map(self.tokenzie)
 
-        print(df.columns)
+        #print(df.columns)
 
 
         # open the XLSX writer

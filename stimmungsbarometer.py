@@ -8,6 +8,7 @@ import re
 import os
 from openpyxl import load_workbook
 from datetime import datetime
+import logging
 
 class Survey:
 
@@ -264,6 +265,8 @@ class Collector:
         """
         if self.master['span'][leader]['leader'] == 0:
             if self.master['span'][leader]['staff'] < min_span:
+                logging.info(f"{leader} reported span is too low "
+                             f"{self.master['span'][leader]['staff']}")
                 return False
         return True
 
@@ -797,7 +800,7 @@ class Process:
 
     def individual_report(self, df, vg, filters):
 
-        if not self.c.check_leader_min_span(vg):
+        if not self.c.check_leader_min_span(vg, min_span=3):
             print(f'<<< remove {vg}')
             return False
 
@@ -947,6 +950,10 @@ if __name__ == "__main__":
     parser.add_option("-m", "--mode", dest="mode",
                   help="vorgesetzter, abteilung, team, gruppe")
 
+
+    logging.basicConfig(filename='run.log', level=logging.INFO)
+    logging.info('Started')
+
     (options, args) = parser.parse_args()
 
     x = Process(options)
@@ -956,3 +963,5 @@ if __name__ == "__main__":
     x.run()
 
     #x.h.update_history_fies_from_xlsx(x.path, "history.xlsx")
+    logging.info('Finished')
+

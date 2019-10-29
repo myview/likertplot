@@ -179,8 +179,14 @@ class Survey:
             count = self.df.groupby(column).count()['Stimmungswert'].to_dict()
             self.df = self.df.replace({f'{column}-Count': count})
             self.df = self.df.replace({f'{column}-Max': max_subscriber_dict[column]})
-            self.df[f'{column}-%'] = self.df.loc[:,f'{column}-Count'].astype(int)\
+            try:
+                self.df[f'{column}-%'] = self.df.loc[:,f'{column}-Count'].astype(int)\
                                    / self.df.loc[:,f'{column}-Max'].astype(int)
+            except:
+                print(column)
+                print(max_subscriber_dict[column])
+                print(self.df.loc[:,f'{column}-Max'])
+                sys.exit(1)
 
     def drop_duplicates(self):
         """
@@ -242,6 +248,7 @@ class Collector:
         :return:
         """
         res.append(name)
+        # print(vglst)
         for subname in vglst[name]:
             self._rec_add_to(subname, res, vglst)
         return res
@@ -265,7 +272,7 @@ class Collector:
         """
         if self.master['span'][leader]['leader'] == 0:
             if self.master['span'][leader]['staff'] < min_span:
-                logging.info(f"{leader} reported span is too low "
+                logging.info(f"<<< {leader} reported span is too low "
                              f"{self.master['span'][leader]['staff']}")
                 return False
         return True
@@ -488,7 +495,7 @@ class Basic(Sheet):
             )
 
         self.survey.df['Veränderung'] = self.survey.df[f'{self.main_col}-Mean'] - \
-                                        self.survey.df['2019.01.01']
+                                        self.survey.df['2019.04.01']
 
     def finalize(self):
 
@@ -526,7 +533,7 @@ class Basic(Sheet):
 
         # check if sheet is emmpty
         if not self.col_idx:
-            print("> sheet is empty")
+            logging.info(f">>> empty sheet in {self.sheet}")
             return False
 
         self.survey.df.to_excel(self.writer, self.sheet)
@@ -638,9 +645,8 @@ class ReportFeedback(Basic):
 
         :return:
         """
-        # check if sheet is emmpty
+        # check if sheet is empty
         if not self.col_idx:
-            print("> sheet is empty")
             return False
 
         # define and setP number formats
@@ -800,8 +806,10 @@ class Process:
 
     def individual_report(self, df, vg, filters):
 
-        if not self.c.check_leader_min_span(vg, min_span=3):
-            print(f'<<< remove {vg}')
+        min_span = 4
+
+        if not self.c.check_leader_min_span(vg, min_span = min_span):
+            logging.info(f'<<< remove {vg} the leader its span is below {min_span}')
             return False
 
         s = self.s.get_copy(vg, self.c)
@@ -863,7 +871,7 @@ class Process:
 
         # final save
         writer.save()
-
+        logging.info(f"--- finalize report: {vg}")
 
     def export_history(self):
 
@@ -927,6 +935,8 @@ class Process:
         writer.save()
 
 if __name__ == "__main__":
+
+    logging.basicConfig(level=logging.DEBUG)
 
     parser = OptionParser()
 

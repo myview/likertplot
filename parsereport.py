@@ -6,6 +6,7 @@ import pandas as pd
 import json
 import sys
 import re
+import numpy as np
 
 class Process:
 
@@ -14,14 +15,15 @@ class Process:
         # Configure the layers
         self.layers = ['Abteilung', 'Sub-Abteilung', 'Team', 'Gruppe','Unternehmen']
 
-        # Create an empty data master structure
+        # Create an empty data
+        # master structure
         self.master = {}
         self.master['counts'] = {
             'Vorgesetzter'  : {},
             'Abteilung'     : {},
             'Sub-Abteilung' : {},
             'Team'          : {},
-            'Unternehmen'
+            'Unternehmen'   : {}, 
             'Gruppe'        : {} }
         self.master['tree'] = {}
         self.master['filenames'] = {}
@@ -36,6 +38,7 @@ class Process:
         self.create_collector(options)
         self.create_vg_tree(options)
         self.create_abt_tree(options)
+        #self.create_email_list(options)
         self.get_low_management_span(options)
 
     def _get_id(self, name):
@@ -45,9 +48,10 @@ class Process:
             https://pythex.org
             https://tinyurl.com/yd6p4kbz
         """
-        m = re.search('^([A-Z]{2,}|[0-9]{2,})', name)
+        m = re.search('^([A-Z]{2,}|[A-Z]{2}[0-9]{2}|[0-9]{2,})(-| )(.*)', name)
+        # DEBUG print(f'{m.group(0)} - {m.group(1)}')
         if m:
-            return m.group(0)
+            return m.group(1)
         return name
 
     def _gruppe_id_to_master(self, name):
@@ -73,6 +77,9 @@ class Process:
             self.master['id'][layer][i] = []
         if t not in self.master['id'][layer][i]:
             self.master['id'][layer][i].append(t)
+            if layer == "Unternehmen":
+                # DEBUG 
+                print (f"< {i} ({t}) > {layer} ")
 
     def drop_unwanted_columns(self, df, keep=[]):
 
@@ -84,7 +91,6 @@ class Process:
         return df
 
     def gen_groups(self, name):
-        #print(name)
         id_nr   = name.split('-', 1)[0]
         id_name = name.split('-', 1)[1]
         if id_nr not in self.groups:
@@ -132,6 +138,27 @@ class Process:
 
         self.master['ma-to-abt'] = json.loads(df.to_json())
 
+    def create_vg_email_list(self, options):
+        """list bottom leaders with low management span
+        """
+        self.master['vg-email'] = {}
+        email = 'Geschäftlich  Informationen zur E-Mail E-Mail-Adresse'
+        df = pd.read_csv(options.filename)
+        df = df.loc[df['Nachname'].notna()]
+        df['Mitarbeiter']  = df.apply(lambda row: row['Nachname'] + ", " + row['Vorname'], axis=1)
+        df = df.loc[df['Mitarbeiter'].notna()]
+        vgl = df['Vorgesetzter'].unique().tolist()
+        ceo = None
+        for vg in vgl:
+            for idx, ma in df.loc[(df['Mitarbeiter'] == vg)].iterrows():
+                self.master['vg-email'][ma['Mitarbeiter']] = ma[email]
+                self.master['vg-email'][vg] = ma[email]
+
+        for idx, ma in df.loc[(df['Vorgesetzter'].isnull())].iterrows():
+            self.master['vg-email'][ma['Mitarbeiter']] = ma[email]
+
+
+
     def get_low_management_span(self, options):
         """list bottom leaders with low management span
         """
@@ -149,6 +176,10 @@ class Process:
 
             # Remove empty values (might be CEO)
             if type(vg) != str:
+                
+                # CEO hack
+                self.master['ceo'] = vg
+                
                 continue
 
             vn = 0
@@ -195,16 +226,23 @@ class Process:
         df['Abteilung'].map(self._abteilung_id_to_master)
         df['Unternehmen'].map(self._unternehmen_id_to_master)
 
+        #print(df['Unternehmen'])
+        
         # Reduce all columnes used as layer to the ID
         for layer in self.layers:
             df[layer] = df[layer].map(self._get_id)
 
+        #print(df['Unternehmen'])            
+            
         # Get list of all leaders
         self.master['leaders'] = df['Vorgesetzter'].unique().tolist()
 
         # Count all Filters
         for col in self.master['counts']:
+            print(f'COL: ({col})')
             for name, cnt in df.groupby(col).count()['Nachname'].iteritems():
+                # DEBUG if col == "Unternehmen":
+                #    print (name)
                 self.master['counts'][col][name.split(' | ')[0]] = cnt
 
         df['Mitarbeiter']  = df.apply(lambda row: row['Nachname'] + ", " + row['Vorname'], axis=1)
@@ -216,11 +254,22 @@ class Process:
                 # CEO
                 continue
 
+            print(vg)
+                
             ret  = df.loc[ (df['Mitarbeiter'] == vg) ]
             name = ""
             for layer in self.layers:
+                """
+                    No problem: 
+                    > Catch problems with empty lines in the file: "","","","","","","","","",""
+                    > Catch problems with external admins (Marcus) "Marcus"...
+                    Problems:
+                    > The leader is no longer an employer. Index 0 fault
+                    > Problem found in SF data
+                """
                 name += ret[layer].values[0] + "-"
             name += vg.replace(', ', '-') + ".xlsx"
+            print(name)
             self.master['filenames'][vg] = name.replace(' ', '-')
 
             vn = 0
@@ -316,5 +365,6 @@ if __name__ == "__main__":
     (options, args) = parser.parse_args()
 
     run = Process(options)
+    run.create_vg_email_list(options)
     run.write_master_to_json()
     run.create_collector(options)

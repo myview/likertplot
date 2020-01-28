@@ -41,6 +41,12 @@ class Process:
         #self.create_email_list(options)
         self.get_low_management_span(options)
 
+    def _fix_report_renaming(self, df):
+        return df.rename(columns={
+            'amtliche Nachname' : 'Nachname',
+            })
+      
+        
     def _get_id(self, name):
         """
         Retruns the unique identifier of the name
@@ -115,7 +121,9 @@ class Process:
     def create_abt_tree(self, options):
 
         df = pd.read_csv(options.filename)
-
+        df = self._fix_report_renaming(df)
+           
+        
         keep = [
             'Nachname',
             'Vorname',
@@ -144,6 +152,7 @@ class Process:
         self.master['vg-email'] = {}
         email = 'Geschäftlich  Informationen zur E-Mail E-Mail-Adresse'
         df = pd.read_csv(options.filename)
+        df = self._fix_report_renaming(df)
         df = df.loc[df['Nachname'].notna()]
         df['Mitarbeiter']  = df.apply(lambda row: row['Nachname'] + ", " + row['Vorname'], axis=1)
         df = df.loc[df['Mitarbeiter'].notna()]
@@ -164,6 +173,7 @@ class Process:
         """
 
         df = pd.read_csv(options.filename)
+        df = self._fix_report_renaming(df)
         df = df.loc[df['Nachname'].notna()]
         df['Mitarbeiter']  = df.apply(lambda row: row['Nachname'] + ", " + row['Vorname'], axis=1)
         df = df.loc[df['Mitarbeiter'].notna()]
@@ -202,6 +212,7 @@ class Process:
     def create_vg_tree(self, options):
 
         df = pd.read_csv(options.filename)
+        df = self._fix_report_renaming(df)
         df = df.loc[df.Mitarbeitergruppe != 'Lernende']
         df = df.loc[df['Mitarbeitergruppe'].notna()]
 
@@ -297,6 +308,7 @@ class Process:
     def create_collector(self, options):
 
         df = pd.read_csv(options.filename)
+        df = self._fix_report_renaming(df)
 
         df = self.drop_unwanted_columns(df, [
             'Geschäftlich  Informationen zur E-Mail E-Mail-Adresse',

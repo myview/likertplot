@@ -9,6 +9,7 @@ import os
 from openpyxl import load_workbook
 from datetime import datetime
 import logging
+import sys
 
 class Survey:
 
@@ -62,6 +63,10 @@ class Survey:
         # Delte Row 2 some helper text
         df = df.drop(df.index[0])
 
+        # CEO has no direct leader
+        df['VGLAST'] = df['VGLAST'].fillna('')
+        df['VGFIRST'] = df['VGFIRST'].fillna('')
+        
         df['Stimmungswert'] = df['Stimmungswert'].astype(int)
         df['Vorgesetzter']  = df.apply(lambda row: row['VGLAST'] + ", " + row['VGFIRST'], axis=1)
         df['Mitarbeiter']   = df.apply(lambda row: row['last_name'] + ", " + row['first_name'], axis=1)
@@ -182,10 +187,12 @@ class Survey:
             try:
                 self.df[f'{column}-%'] = self.df.loc[:,f'{column}-Count'].astype(int)\
                                    / self.df.loc[:,f'{column}-Max'].astype(int)
-            except:
+            except Exception as err:
                 print(column)
                 print(max_subscriber_dict[column])
                 print(self.df.loc[:,f'{column}-Max'])
+                print(err)
+                print("Unexpected error:", sys.exc_info()[0])
                 sys.exit(1)
 
     def drop_duplicates(self):
@@ -494,8 +501,17 @@ class Basic(Sheet):
                 date=datetime.strptime(date, '%Y.%m.%d')
             )
 
+        # Merge the last 3 history values into one
+        self.survey.df['last'] = self.survey.df['2019.10.01']
+        for idx in ['2019.10.01', '2019.07.01', '2019.04.01']:
+            self.survey.df['last'] = self.survey.df['last'].fillna(self.survey.df[f'{idx}'])            
+            
         self.survey.df['Veränderung'] = self.survey.df[f'{self.main_col}-Mean'] - \
-                                        self.survey.df['2019.04.01']
+                                        self.survey.df['last']
+                                        
+        # Remove helper column last
+        self.survey.df = self.survey.df.drop(columns=['last'])
+        
 
     def finalize(self):
 
@@ -515,6 +531,7 @@ class Basic(Sheet):
         self.survey.swap_from_id_to_fulltext(self.main_col, self.collector)
 
         # Remove all columns witch are fully empty
+        
         non_null_columns = [col for col in self.survey.df.columns
                             if self.survey.df.loc[:, col].notna().any()]
         self.survey.df = self.survey.df.reindex(non_null_columns, axis=1)
@@ -721,6 +738,9 @@ class Process:
         self.s.workaround_fix_leader_names()
         self.s.add_sub_division_company_information(self.c.master['ma-to-abt'])
         self.s.swap_from_fulltext_to_id(filters)
+        
+        # FIX empty leader of CEO - ", ": 0
+        self.c.master['counts']['Vorgesetzter'][', '] = 0
         self.s.add_columns_with_subscriber_statistics(filters, self.c.master['counts'])
         self.s.add_column_with_the_calulated_mean(filters)
 
@@ -805,12 +825,6 @@ class Process:
 
 
     def individual_report(self, df, vg, filters):
-
-        min_span = 4
-
-        if not self.c.check_leader_min_span(vg, min_span = min_span):
-            logging.info(f'<<< remove {vg} the leader its span is below {min_span}')
-            return False
 
         s = self.s.get_copy(vg, self.c)
 
@@ -960,7 +974,6 @@ if __name__ == "__main__":
     parser.add_option("-m", "--mode", dest="mode",
                   help="vorgesetzter, abteilung, team, gruppe")
 
-
     logging.basicConfig(filename='run.log', level=logging.INFO)
     logging.info('Started')
 
@@ -968,10 +981,8 @@ if __name__ == "__main__":
 
     x = Process(options)
     x.h.import_history(x.path)
-    #x.h.get_entries_as_sorted_list()
     x.export_history()
     x.run()
 
-    #x.h.update_history_fies_from_xlsx(x.path, "history.xlsx")
     logging.info('Finished')
 

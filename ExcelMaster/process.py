@@ -1,8 +1,10 @@
 #!/usr/bin/python3
 
 from   optparse import OptionParser
+from   datetime import datetime
 import pandas as pd
 import pysftp
+import os
 
 """
 Install:
@@ -18,6 +20,11 @@ class MasterExcel:
         self.df = pd.read_excel(filename)
         self.outputfile = outputfile
 
+    def addDateToFilename(self):
+        (name, ending) = os.path.splitext(self.outputfile)
+        date = datetime.today().strftime('%Y%m%d')
+        self.outputfile = name + date + ending
+        
     def toInteger(self, column):
         self.df[column] = self.df[column].astype('Int64')
 
@@ -30,7 +37,7 @@ class MasterExcel:
 class AdImportFile(MasterExcel):
 
     def __init__(self, filename, options):
-        MasterExcel.__init__(self, filename, "AD_UPDATE_EXTERNE.csv")
+        MasterExcel.__init__(self, filename, "ADexterne.csv")
 
         # Rename existing columns
         self.df = self.df.rename(columns={
@@ -105,6 +112,9 @@ class AdImportFile(MasterExcel):
         self.toInteger('employeeID')
         self.toInteger('manager')
 
+        # Add current date to filename
+        self.addDateToFilename()
+        
         # Store to output file
         self.df.to_csv(self.outputfile,
                        index=False,
@@ -138,9 +148,12 @@ class EcAsesEmployeeData(MasterExcel):
 
 
 def upload(options, host, remoteFilePath, localFilePath):
+    cnopts = pysftp.CnOpts()
+    cnopts.hostkeys = None 
     with pysftp.Connection(host     = host,
                            username = options.user,
-                           password = options.pw
+                           password = options.pw,
+                           cnopts   = cnopts
                            ) as sftp:
         print ("Connection succesfully stablished ... ")
         sftp.put(localFilePath, remoteFilePath)
@@ -183,8 +196,8 @@ def main():
         print(f'File written: {run.outputfile}')
         if (options.sftp):
             upload(options          = options,
-                   host             = 'https://www.dummy.com',
-                   remoteFilePath   = '/var/xxx',
+                   host             = 'ftp.digitecgalaxus.ch',
+                   remoteFilePath   = '/',
                    localFilePath    = run.outputfile)
 
     if (options.mode == "ALL" or options.mode == "AD"):
@@ -192,9 +205,9 @@ def main():
         print(f'File written: {run.outputfile}')
         if (options.sftp):
             upload(options          = options,
-                   host             = 'https://www.dummy.com',
-                   remoteFilePath   = '/var/xxx',
-                   localFilePath    = run.outputfile)
+                   host             = 'sftp012.successfactors.eu',
+                   remoteFilePath   = f'/incoming/ADExport/{run.outputfile}',
+                   localFilePath    = f'./{run.outputfile}')
 
 if __name__ == "__main__":
     main()

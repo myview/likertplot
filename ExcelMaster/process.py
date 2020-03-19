@@ -171,8 +171,6 @@ class XmlExport(MasterExcel):
     def process(self):
         for (index_label, row) in self.df.iterrows():
             filename = f"{row.Nachname}-{row.Vorname}.xml"
-            #print(row.__dict__)
-            #print(row
             xml = (
                 E.EmployeeImport(
                     E.EmployeeDetails(
@@ -280,7 +278,7 @@ def main():
     if (options.mode == 'XML'):
         run = XmlExport(args[0], options)
         for ret in run.process():
-            print(f'>>> created: {ret}')
+            print(f'>>> File written: {ret}')
 
     if (options.mode == "ALL" or options.mode == "EC"):
         run = EcAsesEmployeeData(args[0], options)

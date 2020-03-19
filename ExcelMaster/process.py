@@ -22,7 +22,7 @@ Batch Datei (RUN.bat):
     python process.py "Master DasTeam_Mitarbeitende.xlsm" -u *** -p *** -m AD -x
     ECHO Taste druecken zum Beenden
     PAUSE > NUL
- 
+
 """
 
 class MasterExcel:
@@ -35,7 +35,7 @@ class MasterExcel:
         (name, ending) = os.path.splitext(self.outputfile)
         date = datetime.today().strftime('%Y%m%d')
         self.outputfile = name + date + ending
-        
+
     def toInteger(self, column):
         self.df[column] = self.df[column].astype('Int64')
 
@@ -55,16 +55,16 @@ class AdImportFile(MasterExcel):
             'Mitarbeiter-Nummer'    : 'employeeID',
             'Erster Arbeitstag'     : 'entrydate',
             'Vertragsende'          : 'exitdate',
-            'Nachname'              : 'givenName',
-            'Vorname'               : 'sn',
+            'Nachname'              : 'sn',
+            'Vorname'               : 'givenName',
             'Vorgesetzer'           : 'manager',
             })
 
         # Copy columns and set Picking and Packign according to rule
         self.df['lastworkday']                      = self.df.exitdate
         self.df['team']                             = self.df.manager
-        self.df.loc[self.df.team != 633, 'team']    = 'Packing'
-        self.df.loc[self.df.team == 633, 'team']    = 'Picking'
+        self.df.loc[self.df.team != 633, 'team']    = 'Picking'
+        self.df.loc[self.df.team == 633, 'team']    = 'Packing'
         self.df['group']                            = self.df.team
 
         # Re-Index to new output columns
@@ -125,7 +125,7 @@ class AdImportFile(MasterExcel):
 
         # Add current date to filename
         self.addDateToFilename()
-        
+
         # Store to output file
         self.df.to_csv(self.outputfile,
                        index=False,
@@ -159,7 +159,7 @@ class EcAsesEmployeeData(MasterExcel):
 
 def ftpCmd(options, host, remoteFilePath, localFilePath):
     cnopts = pysftp.CnOpts()
-    cnopts.hostkeys = None 
+    cnopts.hostkeys = None
     with pysftp.Connection(host     = host,
                            username = options.user,
                            password = options.pw,
@@ -168,11 +168,11 @@ def ftpCmd(options, host, remoteFilePath, localFilePath):
         print (">>> Connection succesfully stablished ... ")
         if (options.remove):
             sftp.remove(remoteFilePath)
-            print (">>> Remove done")          
+            print (">>> Remove done")
         else:
             sftp.put(localFilePath, remoteFilePath)
-            print (">>> Upload done")        
-        
+            print (">>> Upload done")
+
 def main():
     parser = OptionParser("usage: process.py SOURCE [options]")
 
@@ -204,7 +204,7 @@ def main():
                       default=False,
                       help="SFTP delete file")
 
-                      
+
     (options, args) = parser.parse_args()
 
     if len(args) != 1:

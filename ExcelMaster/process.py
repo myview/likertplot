@@ -8,10 +8,21 @@ import os
 
 """
 Install:
- 1) https://www.python.org/ftp/python/3.8.2/python-3.8.2-amd64.exe
- 2) pip3 install pysftp
- 3) pip3 install pandas
 
+    1) https://www.python.org/ftp/python/3.8.2/python-3.8.2-amd64.exe
+    2) pip3 install pysftp
+    3) pip3 install pandas
+
+Batch Datei (RUN.bat):
+
+    @ECHO OFF
+    CLS
+    TITLE Process MasterExcel
+    python process.py "Master DasTeam_Mitarbeitende.xlsm" -u *** -p *** -m EC -x
+    python process.py "Master DasTeam_Mitarbeitende.xlsm" -u *** -p *** -m AD -x
+    ECHO Taste druecken zum Beenden
+    PAUSE > NUL
+ 
 """
 
 class MasterExcel:
@@ -146,8 +157,7 @@ class EcAsesEmployeeData(MasterExcel):
                        date_format='%Y-%m-%d',
                        sep=';')
 
-
-def upload(options, host, remoteFilePath, localFilePath):
+def ftpCmd(options, host, remoteFilePath, localFilePath):
     cnopts = pysftp.CnOpts()
     cnopts.hostkeys = None 
     with pysftp.Connection(host     = host,
@@ -155,10 +165,14 @@ def upload(options, host, remoteFilePath, localFilePath):
                            password = options.pw,
                            cnopts   = cnopts
                            ) as sftp:
-        print ("Connection succesfully stablished ... ")
-        sftp.put(localFilePath, remoteFilePath)
-        print ("Upload done")
-
+        print (">>> Connection succesfully stablished ... ")
+        if (options.remove):
+            sftp.remove(remoteFilePath)
+            print (">>> Remove done")          
+        else:
+            sftp.put(localFilePath, remoteFilePath)
+            print (">>> Upload done")        
+        
 def main():
     parser = OptionParser("usage: process.py SOURCE [options]")
 
@@ -184,27 +198,32 @@ def main():
                       default=False,
                       help="SFTP upload file")
 
+    parser.add_option("-r", "--remove",
+                      action="store_true",
+                      dest="remove",
+                      default=False,
+                      help="SFTP delete file")
 
+                      
     (options, args) = parser.parse_args()
 
     if len(args) != 1:
         parser.error("incorrect number of arguments")
 
-
     if (options.mode == "ALL" or options.mode == "EC"):
         run = EcAsesEmployeeData(args[0], options)
-        print(f'File written: {run.outputfile}')
-        if (options.sftp):
-            upload(options          = options,
+        print(f'>>> File written: {run.outputfile}')
+        if (options.sftp or options.remove):
+            ftpCmd(options          = options,
                    host             = 'ftp.digitecgalaxus.ch',
-                   remoteFilePath   = '/',
-                   localFilePath    = run.outputfile)
+                   remoteFilePath   = f'/{run.outputfile}',
+                   localFilePath    = f'./{run.outputfile}')
 
     if (options.mode == "ALL" or options.mode == "AD"):
         run = AdImportFile(args[0], options)
-        print(f'File written: {run.outputfile}')
-        if (options.sftp):
-            upload(options          = options,
+        print(f'>>> File written: {run.outputfile}')
+        if (options.sftp or options.remove):
+            ftpCmd(options          = options,
                    host             = 'sftp012.successfactors.eu',
                    remoteFilePath   = f'/incoming/ADExport/{run.outputfile}',
                    localFilePath    = f'./{run.outputfile}')

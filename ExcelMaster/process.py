@@ -2,9 +2,12 @@
 
 from   optparse import OptionParser
 from   datetime import datetime
+from   lxml.builder import E
+from   lxml import etree
 import pandas as pd
 import pysftp
 import os
+
 
 """
 Install:
@@ -136,7 +139,7 @@ class AdImportFile(MasterExcel):
 class EcAsesEmployeeData(MasterExcel):
 
     def __init__(self, filename, options):
-        MasterExcel.__init__(self, filename, "EC_ASES_EMPLOYEE_DATA.csv")
+        MasterExcel.__init__(self, filename, "EC_ASES_Employee_Data_Temp.csv")
 
         # Drop empty rows
         self.dropEmptyRows('Mitarbeiter-Nummer')
@@ -156,6 +159,69 @@ class EcAsesEmployeeData(MasterExcel):
                        header=False,
                        date_format='%Y-%m-%d',
                        sep=';')
+
+class XmlExport(MasterExcel):
+
+    def __init__(self, filename, options):
+        MasterExcel.__init__(self, filename, None)
+        # Drop empty rows
+        self.dropEmptyRows('Mitarbeiter-Nummer')
+        self.df['Vorname'] = self.df['Vorname'].str.strip()
+
+    def process(self):
+        for (index_label, row) in self.df.iterrows():
+            filename = f"{row.Nachname}-{row.Vorname}.xml"
+            #print(row.__dict__)
+            #print(row
+            xml = (
+                E.EmployeeImport(
+                    E.EmployeeDetails(
+                        E.OldDigitecId(f'{row["Mitarbeiter-Nummer"]}'),
+                        E.UserName(f'{row.Vorname}.{row.Nachname}'),
+                        E.EntryDate(f'{row["Erster Arbeitstag"]}'),
+                        E.LastDayWorked(f'{row.Vertragsende}'),
+                        E.ExitDate(f'{row.Vertragsende}'),
+                        E.LastChangeGeneralInformation(f'020-03-12T08:54:09Z')
+                        ),
+                    E.PersonalInformation(
+                        E.Title(f'Receiving Assistant'),
+                        E.FirstName(f'{row.Vorname}'),
+                        E.LastName(f'{row.Nachname}'),
+                        E.LastChangePersonalInformation(f'2020-03-11T20:08:04Z')
+                        ),
+                    E.ContactDetails(
+                        E.ContactLanguage(f'1'),
+                        E.BusinessMail(row['E-Mail']),
+                        E.LastChangeMail(f'2020-03-11T20:08:01Z'),
+                        E.CountryCodeBusinessPhone(f''),
+                        E.BusinessPhoneNumber(f''),
+                        E.LastChangePhone(f'')
+                        ),
+                    E.AdressDetails(
+                        E.Street(f''),
+                        E.ZipCode(f''),
+                        E.City(f''),
+                        E.Country(f''),
+                        E.LastChangeAdress(f'2020-03-11T20:08:04Z')
+                        ),
+                    E.EmployemntDetails(
+                        E.JobTitle(f'Receiving Assistant'),
+                        E.PositionEntryDate(f'2020-03-16T00:00:00Z'),
+                        E.SiteId(f'246956'),
+                        E.ManagerOldDigitecId(f'1862'),
+                        E.MainDepartmentId(f'641'),
+                        E.LastChangeJobInfo(f'2020-03-16T09:58:10Z')
+                        ),
+                    E.BankDetails(
+                        E.IBAN(f''),
+                        E.Currency(f'CHF')
+                        )
+                    )
+                )
+            with open(f'./{filename}', 'wb') as f:
+                f.write(etree.tostring(xml, pretty_print=True))
+
+            yield (filename)
 
 def ftpCmd(options, host, remoteFilePath, localFilePath):
     cnopts = pysftp.CnOpts()
@@ -179,6 +245,7 @@ def main():
     parser.add_option("-m", "--mode",
                       default="ALL",
                       help="Export mode: (AD) ActieDirectory,"
+                      "(XML) Export to XML,"
                       "(EC) Employee Central or (ALL)"
                       "[default: %default]")
 
@@ -209,6 +276,11 @@ def main():
 
     if len(args) != 1:
         parser.error("incorrect number of arguments")
+
+    if (options.mode == 'XML'):
+        run = XmlExport(args[0], options)
+        for ret in run.process():
+            print(f'>>> created: {ret}')
 
     if (options.mode == "ALL" or options.mode == "EC"):
         run = EcAsesEmployeeData(args[0], options)

@@ -34,6 +34,12 @@ class MasterExcel:
         self.df = pd.read_excel(filename)
         self.outputfile = outputfile
 
+        # Drop empty rows
+        self.dropEmptyRows('Mitarbeiter-Nummer')
+
+        # Set sepecific cell types
+        self.toInteger('Mitarbeiter-Nummer')
+
     def addDateToFilename(self):
         (name, ending) = os.path.splitext(self.outputfile)
         date = datetime.today().strftime('%Y%m%d')
@@ -123,7 +129,6 @@ class AdImportFile(MasterExcel):
         self.dropEmptyRows('employeeID')
 
         # Make real integers where required
-        self.toInteger('employeeID')
         self.toInteger('manager')
 
         # Add current date to filename
@@ -141,11 +146,7 @@ class EcAsesEmployeeData(MasterExcel):
     def __init__(self, filename, options):
         MasterExcel.__init__(self, filename, "EC_ASES_Employee_Data_Temp.csv")
 
-        # Drop empty rows
-        self.dropEmptyRows('Mitarbeiter-Nummer')
-
         # Set sepecific cell types
-        self.toInteger('Mitarbeiter-Nummer')
         self.toInteger('Vorgesetzer')
         self.toInteger('Gruppe.1')
         self.toInteger('Badgenummer')
@@ -171,48 +172,50 @@ class XmlExport(MasterExcel):
     def process(self):
         for (index_label, row) in self.df.iterrows():
             filename = f"{row.Nachname}-{row.Vorname}.xml"
+            eintritt = row["Erster Arbeitstag"].strftime('%Y-%m-%dT%H:%M:%SZ')
+            austritt = row["Vertragsende"].strftime('%Y-%m-%dT%H:%M:%SZ')
             xml = (
                 E.EmployeeImport(
                     E.EmployeeDetails(
                         E.OldDigitecId(f'{row["Mitarbeiter-Nummer"]}'),
                         E.UserName(f'{row.Vorname}.{row.Nachname}'),
-                        E.EntryDate(f'{row["Erster Arbeitstag"]}'),
-                        E.LastDayWorked(f'{row.Vertragsende}'),
-                        E.ExitDate(f'{row.Vertragsende}'),
-                        E.LastChangeGeneralInformation(f'020-03-12T08:54:09Z')
+                        E.EntryDate(eintritt),
+                        E.LastDayWorked(austritt),
+                        E.ExitDate(austritt),
+                        E.LastChangeGeneralInformation()
                         ),
                     E.PersonalInformation(
-                        E.Title(f'Receiving Assistant'),
+                        E.Title('External Warehouse Worker'),
                         E.FirstName(f'{row.Vorname}'),
                         E.LastName(f'{row.Nachname}'),
-                        E.LastChangePersonalInformation(f'2020-03-11T20:08:04Z')
+                        E.LastChangePersonalInformation()
                         ),
                     E.ContactDetails(
-                        E.ContactLanguage(f'1'),
+                        E.ContactLanguage("1"),
                         E.BusinessMail(row['E-Mail']),
-                        E.LastChangeMail(f'2020-03-11T20:08:01Z'),
-                        E.CountryCodeBusinessPhone(f''),
-                        E.BusinessPhoneNumber(f''),
-                        E.LastChangePhone(f'')
+                        E.LastChangeMail(),
+                        E.CountryCodeBusinessPhone(),
+                        E.BusinessPhoneNumber(),
+                        E.LastChangePhone()
                         ),
                     E.AdressDetails(
-                        E.Street(f''),
-                        E.ZipCode(f''),
-                        E.City(f''),
-                        E.Country(f''),
-                        E.LastChangeAdress(f'2020-03-11T20:08:04Z')
+                        E.Street('Industriestrasse 21'),
+                        E.ZipCode('5610'),
+                        E.City('Wohlen'),
+                        E.Country('Switzerland'),
+                        E.LastChangeAdress()
                         ),
                     E.EmployemntDetails(
-                        E.JobTitle(f'Receiving Assistant'),
-                        E.PositionEntryDate(f'2020-03-16T00:00:00Z'),
+                        E.JobTitle('External Warehouse Worker'),
+                        E.PositionEntryDate(eintritt),
                         E.SiteId(f'246956'),
-                        E.ManagerOldDigitecId(f'1862'),
-                        E.MainDepartmentId(f'641'),
-                        E.LastChangeJobInfo(f'2020-03-16T09:58:10Z')
+                        E.ManagerOldDigitecId(f'{row.Vorgesetzer}'),
+                        E.MainDepartmentId(f'{row.Gruppe}'),
+                        E.LastChangeJobInfo()
                         ),
                     E.BankDetails(
-                        E.IBAN(f''),
-                        E.Currency(f'CHF')
+                        E.IBAN(),
+                        E.Currency()
                         )
                     )
                 )

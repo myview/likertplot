@@ -224,30 +224,49 @@ class XmlExport(MasterExcel):
 
             yield (filename)
 
-def ftpCmd(options, host, remoteFilePath, localFilePath):
-    cnopts = pysftp.CnOpts()
-    cnopts.hostkeys = None
-    with pysftp.Connection(host     = host,
-                           username = options.user,
-                           password = options.pw,
-                           cnopts   = cnopts
-                           ) as sftp:
-        print (">>> Connection succesfully stablished ... ")
-        if (options.remove):
-            sftp.remove(remoteFilePath)
-            print (">>> Remove done")
-        else:
-            sftp.put(localFilePath, remoteFilePath)
-            print (">>> Upload done")
+
+class Upload:
+
+    def __init__(self):
+        self.files  = []
+        self.cnopts = pysftp.CnOpts()
+        self.cnopts.hostkeys = None
+
+    def _ftpCmd(self, user, pw, option="uplaod"):
+        with pysftp.Connection(
+                username = user,
+                password = pw,
+                host     = self.host,
+                cnopts   = self.cnopts
+                ) as sftp:
+            for (localFilePath, remoteFilePath) in self.files:
+                if option == "uplaod": sftp.put(localFilePath, remoteFilePath)
+                if option == "remove": sftp.remove(remoteFilePath)
+                yield (remoteFilePath)
+
+    def setHost(self, host):
+        self.host  = host
+
+    def addFile(self, localFilePath, remoteFilePath):
+        self.files.append((localFilePath, remoteFilePath))
+
+    def uploadFiles(self, user, pw):
+        for ret in self._ftpCmd(user, pw):
+            yield (ret)
+
+    def removeFiles(self, user, pw):
+        for ret in self._ftpCmd(user, pw, option="remove"):
+            yield (ret)
+
 
 def main():
     parser = OptionParser("usage: process.py SOURCE [options]")
 
     parser.add_option("-m", "--mode",
-                      default="ALL",
+                      default="AD",
                       help="Export mode: (AD) ActieDirectory,"
                       "(XML) Export to XML,"
-                      "(EC) Employee Central or (ALL)"
+                      "(EC) Employee Central"
                       "[default: %default]")
 
     parser.add_option("-u", "--user",
@@ -278,28 +297,36 @@ def main():
     if len(args) != 1:
         parser.error("incorrect number of arguments")
 
+    ftp = Upload()
+
     if (options.mode == 'XML'):
+        ftp.setHost('sftp012.successfactors.eu')
         run = XmlExport(args[0], options)
         for ret in run.process():
-            print(f'>>> File written: {ret}')
-
-    if (options.mode == "ALL" or options.mode == "EC"):
+            ftp.addFile(remoteFilePath = f'/incoming/XML-ErpImport/{ret}',
+                        localFilePath  = f'./{ret}')
+            print(f'>>> Write local file: {ret}')
+    elif (options.mode == "EC"):
+        ftp.setHost('ftp.digitecgalaxus.ch')
         run = EcAsesEmployeeData(args[0], options)
-        print(f'>>> File written: {run.outputfile}')
-        if (options.sftp or options.remove):
-            ftpCmd(options          = options,
-                   host             = 'ftp.digitecgalaxus.ch',
-                   remoteFilePath   = f'/{run.outputfile}',
+        ftp.addFile(remoteFilePath   = f'/{run.outputfile}',
                    localFilePath    = f'./{run.outputfile}')
-
-    if (options.mode == "ALL" or options.mode == "AD"):
+        print(f'>>> Write local file: {run.outputfile}')
+    elif (options.mode == "AD"):
+        ftp.setHost('sftp012.successfactors.eu')
         run = AdImportFile(args[0], options)
-        print(f'>>> File written: {run.outputfile}')
-        if (options.sftp or options.remove):
-            ftpCmd(options          = options,
-                   host             = 'sftp012.successfactors.eu',
-                   remoteFilePath   = f'/incoming/ADExport/{run.outputfile}',
+        ftp.addFile(remoteFilePath   = f'/incoming/ADExport/{run.outputfile}',
                    localFilePath    = f'./{run.outputfile}')
+        print(f'>>> Write local file: {run.outputfile}')
+
+    if (options.sftp):
+        if (options.remove):
+            for ret in ftp.removeFiles(options.user, options.pw):
+                print(f'>>> Remove remote file: {ret}')
+        else:
+            for ret in ftp.uploadFiles(options.user, options.pw):
+                print(f'>>> Write remote file: {ret}')
+
 
 if __name__ == "__main__":
     main()

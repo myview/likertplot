@@ -148,7 +148,7 @@ class EcAsesEmployeeData(MasterExcel):
 
         # Set sepecific cell types
         self.toInteger('Vorgesetzer')
-        self.toInteger('Gruppe.1')
+        self.toInteger('Gruppe')
         self.toInteger('Badgenummer')
         self.toInteger('Arbeitstage pro woche')
         self.toDateTime('Eintrittsdatum')
@@ -168,7 +168,12 @@ class XmlExport(MasterExcel):
         # Drop empty rows
         self.dropEmptyRows('Mitarbeiter-Nummer')
         self.df['Vorname'] = self.df['Vorname'].str.strip()
-
+        self.toInteger('Vorgesetzer')
+        self.toInteger('Gruppe')
+        self.toInteger('Badgenummer')
+        self.toInteger('Arbeitstage pro woche')
+        self.toInteger('Mitarbeiter-Nummer')
+        
     def process(self):
         for (index_label, row) in self.df.iterrows():
             filename = f"{row.Nachname}-{row.Vorname}.xml"

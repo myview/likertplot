@@ -37,16 +37,34 @@ class MasterExcel:
         # Drop empty rows
         self.dropEmptyRows('Mitarbeiter-Nummer')
 
+        # Remove tailing spaces
+        self.df['Vorname'] = self.df['Vorname'].str.strip()
+        self.df['Nachname'] = self.df['Nachname'].str.strip()
+
         # Set sepecific cell types
         self.toInteger('Mitarbeiter-Nummer')
+        self.toInteger('Badgenummer')
+        self.toInteger('Arbeitstage pro woche')
+        self.toDateTime('Eintrittsdatum')
+        self.toDateTime('Eintrittsdatum.1')
+        self.toInteger('Vorgesetzer')
+        self.toInteger('Gruppe.1', ignoreError = True)
+        self.toInteger('Gruppe',   ignoreError = True)
 
     def addDateToFilename(self):
         (name, ending) = os.path.splitext(self.outputfile)
         date = datetime.today().strftime('%Y%m%d')
         self.outputfile = name + date + ending
 
-    def toInteger(self, column):
-        self.df[column] = self.df[column].astype('Int64')
+    def toInteger(self, column, ignoreError = False):
+        try:
+            self.df[column] = self.df[column].astype('Int64')
+        except KeyError:
+            if not ignoreError:
+                print(f">>> ERROR: Column [{column}] not found!")
+        except TypeError:
+            if not ignoreError:
+                print(f">>> ERROR: Column [{column}] integer type error!")
 
     def toDateTime(self, column):
         self.df[column] = self.df[column].astype('datetime64')
@@ -71,9 +89,9 @@ class AdImportFile(MasterExcel):
 
         # Copy columns and set Picking and Packign according to rule
         self.df['lastworkday']                      = self.df.exitdate
-        self.df['team']                             = self.df.manager
-        self.df.loc[self.df.team != 633, 'team']    = 'Picking'
-        self.df.loc[self.df.team == 633, 'team']    = 'Packing'
+        self.df['team']                             = self.df.manager.astype('str')
+        self.df.loc[self.df.team != '633', 'team']    = 'Picking'
+        self.df.loc[self.df.team == '633', 'team']    = 'Packing'
         self.df['group']                            = self.df.team
 
         # Re-Index to new output columns
@@ -125,12 +143,6 @@ class AdImportFile(MasterExcel):
         self.df.leaderrole                  = 'Employee (FS1)'
         self.df.departmentrole              = 'SCM Employee'
 
-        # Drop empty rows
-        self.dropEmptyRows('employeeID')
-
-        # Make real integers where required
-        self.toInteger('manager')
-
         # Add current date to filename
         self.addDateToFilename()
 
@@ -139,20 +151,10 @@ class AdImportFile(MasterExcel):
                        index=False,
                        sep=';')
 
-
-
 class EcAsesEmployeeData(MasterExcel):
 
     def __init__(self, filename, options):
         MasterExcel.__init__(self, filename, "EC_ASES_Employee_Data_Temp.csv")
-
-        # Set sepecific cell types
-        self.toInteger('Vorgesetzer')
-        self.toInteger('Gruppe')
-        self.toInteger('Badgenummer')
-        self.toInteger('Arbeitstage pro woche')
-        self.toDateTime('Eintrittsdatum')
-        self.toDateTime('Eintrittsdatum.1')
 
         # Store to output file
         self.df.to_csv(self.outputfile,
@@ -165,18 +167,10 @@ class XmlExport(MasterExcel):
 
     def __init__(self, filename, options):
         MasterExcel.__init__(self, filename, None)
-        # Drop empty rows
-        self.dropEmptyRows('Mitarbeiter-Nummer')
-        self.df['Vorname'] = self.df['Vorname'].str.strip()
-        self.toInteger('Vorgesetzer')
-        self.toInteger('Gruppe')
-        self.toInteger('Badgenummer')
-        self.toInteger('Arbeitstage pro woche')
-        self.toInteger('Mitarbeiter-Nummer')
-        
+
     def process(self):
         for (index_label, row) in self.df.iterrows():
-            filename = f"{row.Nachname}-{row.Vorname}.xml"
+            filename = f"{row.Nachname}-{row.Vorname}.xml".replace(' ', '_')
             eintritt = row["Erster Arbeitstag"].strftime('%Y-%m-%dT%H:%M:%SZ')
             austritt = row["Vertragsende"].strftime('%Y-%m-%dT%H:%M:%SZ')
             xml = (

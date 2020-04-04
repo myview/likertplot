@@ -14,7 +14,7 @@ function addCourseName(value, index, array) {
     data.setAttribute("type", "hidden");
     var input = document.createElement("input");
     input.setAttribute("name", "course");
-    input.setAttribute("value", name);
+    input.setAttribute("value", cs_name);
     input.setAttribute("type", "hidden");
     var submit = document.createElement("input");
     submit.setAttribute("id", "submit_"+value);
@@ -39,8 +39,8 @@ function setFncSubmit(value, index, array) {
                 dataType: "json",
                 data: form.serialize()
               });
-                $(".thanks").html("Thank you for getting in touch!").css("font-size","1rem");
-                $(".form-control").remove();
+                //$(".thanks").html("Thank you for getting in touch!").css("font-size","1rem");
+                $(".cs_thanks").css("visibility","visible");
                 $("#courserating").remove();
                 console.log(e.result)
               });

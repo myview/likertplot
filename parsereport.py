@@ -13,7 +13,7 @@ class Process:
     def __init__(self, options):
 
         # Configure the layers
-        self.layers = ['Abteilung', 'Sub-Abteilung', 'Team', 'Gruppe','Unternehmen']
+        self.layers = ['Unternehmen', 'Abteilung', 'Sub-Abteilung', 'Team', 'Gruppe']
 
         # Create an empty data
         # master structure
@@ -269,19 +269,27 @@ class Process:
                 
             ret  = df.loc[ (df['Mitarbeiter'] == vg) ]
             name = ""
+            print( self.layers)
             for layer in self.layers:
                 """
                     No problem: 
                     > Catch problems with empty lines in the file: "","","","","","","","","",""
                     > Catch problems with external admins (Marcus) "Marcus"...
                     Problems:
-                    > The leader is no longer an employer. Index 0 fault
                     > Problem found in SF data
                 """
+
                 name += ret[layer].values[0] + "-"
-            name += vg.replace(', ', '-') + ".xlsx"
-            print(name)
-            self.master['filenames'][vg] = name.replace(' ', '-')
+
+            try:
+                name += vg.replace(', ', '-') + ".xlsx"
+                print(name)
+                self.master['filenames'][vg] = name.replace(' ', '-')
+            except IndexError as e:
+                print(f'>>> ERROR {e}')
+                print(f'>>> VG: {vg} MA: {name}')
+                print(f'>>> hint: often the VG is no longer employee, problem in data source')
+                sys.exit(-1)
 
             vn = 0
             fs = 0
@@ -345,7 +353,7 @@ class Process:
             'Gruppe' : 'GRUPPE',
             })
 
-        df = df.reindex_axis([
+        df = df.reindex([
             'EMAIL',
             'FIRST',
             'LAST',

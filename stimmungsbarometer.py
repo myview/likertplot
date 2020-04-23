@@ -502,7 +502,7 @@ class Basic(Sheet):
             )
 
         # Merge the last 3 history values into one
-        self.survey.df['last'] = self.survey.df['2019.10.01']
+        self.survey.df['last'] = self.survey.df['2020.01.01']
         for idx in ['2019.10.01', '2019.07.01', '2019.04.01']:
             self.survey.df['last'] = self.survey.df['last'].fillna(self.survey.df[f'{idx}'])            
             
@@ -553,7 +553,7 @@ class Basic(Sheet):
             logging.info(f">>> empty sheet in {self.sheet}")
             return False
 
-        self.survey.df.to_excel(self.writer, self.sheet)
+        self.survey.df.to_excel(self.writer, self.sheet, index=False)
 
 
         # define and set number formats
@@ -561,7 +561,7 @@ class Basic(Sheet):
         worksheet = self.writer.sheets[self.sheet]
 
         #https://xlsxwriter.readthedocs.io/worksheet.html#autofilter
-        worksheet.autofilter(0, 0, self.last_row + 1, self.last_col + 1)
+        worksheet.autofilter(0, 0, self.last_row + 1, self.last_col)
 
         text_format = workbook.add_format()
         text_format.set_text_wrap()
@@ -570,38 +570,38 @@ class Basic(Sheet):
 
         if "Veränderung" in self.col_idx:
             worksheet.conditional_format(0,
-                                     self.col_idx.index('Veränderung') + 1,
+                                     self.col_idx.index('Veränderung'),
                                      self.last_row + 1,
-                                     self.col_idx.index('Veränderung') + 1,
+                                     self.col_idx.index('Veränderung'),
                                      {'type': 'data_bar',
                                       'data_bar_2010': True
                                      })
 
             worksheet.set_column(
-                    self.col_idx.index('Veränderung') + 1,
-                    self.col_idx.index('Veränderung') + 1,
+                    self.col_idx.index('Veränderung'),
+                    self.col_idx.index('Veränderung'),
                     width = 10,
                     cell_format = floa_format
                     )
 
         worksheet.set_column(
-                    self.col_idx.index(self.main_col) + 1,
-                    self.col_idx.index(self.main_col) + 1,
+                    self.col_idx.index(self.main_col),
+                    self.col_idx.index(self.main_col),
                     width = 40,
                     cell_format = text_format
                     )
 
         if "Beteiligung" in self.survey.df.columns.values.tolist():
             worksheet.set_column(
-                    self.col_idx.index('Beteiligung') + 1,
-                    self.col_idx.index('Beteiligung') + 1,
+                    self.col_idx.index('Beteiligung'),
+                    self.col_idx.index('Beteiligung'),
                     width = 10, cell_format = part_format
                     )
 
         try:
             worksheet.set_column(
                 self.col_idx.index(self.history.get_entries_as_sorted_list()[0]),
-                self.last_col + 1,
+                self.last_col,
                 width = 10,
                 cell_format = floa_format
             )
@@ -613,8 +613,8 @@ class Basic(Sheet):
 
         if "Mittelwert" in self.survey.df.columns.values.tolist():
             worksheet.set_column(
-                    self.col_idx.index('Mittelwert') + 1,
-                    self.col_idx.index('Mittelwert') + 1,
+                    self.col_idx.index('Mittelwert'),
+                    self.col_idx.index('Mittelwert'),
                     width = 10,
                     cell_format = floa_format
                     )
@@ -675,8 +675,8 @@ class ReportFeedback(Basic):
 
         try:
             worksheet.set_column(
-                self.col_idx.index('Motivation 1') + 1,
-                self.col_idx.index('Verbesserung 2') + 1,
+                self.col_idx.index('Motivation 1'),
+                self.col_idx.index('Verbesserung 2'),
                 width = 40,
                 cell_format = text_format
                 )
@@ -698,9 +698,9 @@ class ReportFeedback(Basic):
         for idx in range(0, len(colors)):
             idx_format = workbook.add_format({'bg_color': colors[idx]})
             worksheet.conditional_format(0,
-                                     self.col_idx.index('Stimmungswert') + 1,
+                                     self.col_idx.index('Stimmungswert'),
                                      self.last_row + 1,
-                                     self.col_idx.index('Stimmungswert') + 1,
+                                     self.col_idx.index('Stimmungswert'),
                                      {'type'    : 'cell',
                                       'criteria': "=",
                                       'value'   : idx + 1,
@@ -771,7 +771,7 @@ class Process:
         worksheet = writer.sheets[sheet]
 
         #https://xlsxwriter.readthedocs.io/worksheet.html#autofilter
-        worksheet.autofilter(0, 0, last_row + 1, last_col + 1)
+        worksheet.autofilter(0, 0, last_row + 1, last_col)
 
         text_format = workbook.add_format()
         text_format.set_text_wrap()
@@ -790,8 +790,8 @@ class Process:
                             cell_format = floa_format
                             )
         """
-        worksheet.set_column(col_idx.index('Motivation 1') + 1,
-                            col_idx.index('Verbesserung 2') + 1,
+        worksheet.set_column(col_idx.index('Motivation 1'),
+                            col_idx.index('Verbesserung 2'),
                             width = 40,
                             cell_format = text_format
                             )
@@ -811,9 +811,9 @@ class Process:
         for idx in range(0, len(colors)):
             idx_format = workbook.add_format({'bg_color': colors[idx]})
             worksheet.conditional_format(0,
-                                     col_idx.index('Stimmungswert') + 1,
+                                     col_idx.index('Stimmungswert'),
                                      last_row + 1,
-                                     col_idx.index('Stimmungswert') + 1,
+                                     col_idx.index('Stimmungswert'),
                                      {'type'    : 'cell',
                                       'criteria': "=",
                                       'value'   : idx + 1,
